@@ -1,0 +1,43 @@
+# ================= Maven =================
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+# maven wrapper 需要保留（供他人 clone 后直接运行）
+!.mvn/wrapper/maven-wrapper.jar
+
+# ================= Java 编译产物 =================
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+# ================= IntelliJ IDEA =================
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ================= Eclipse / VS Code =================
+.settings/
+.project
+.classpath
+.factorypath
+.vscode/
+
+# ================= 日志 =================
+*.log
+logs/
+
+# ================= 操作系统 =================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ================= 本地私有配置（含真实密码，禁止提交） =================
+src/main/resources/application-local.yaml
