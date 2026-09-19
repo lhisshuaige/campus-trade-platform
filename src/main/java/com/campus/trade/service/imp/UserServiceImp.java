@@ -7,6 +7,7 @@ import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.entry.User;
 import com.campus.trade.bean.utils.JwtUtils;
 import com.campus.trade.bean.utils.TokenBlacklistUtils;
+import com.campus.trade.bean.utils.TokenVersionUtils;
 import com.campus.trade.bean.utils.UserActionLimitUtils;
 import com.campus.trade.bean.vo.request.user.UserChangePasswordVo;
 import com.campus.trade.bean.vo.request.user.UserLoginVo;
@@ -30,6 +31,9 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
 
     @Resource
     private TokenBlacklistUtils tokenBlacklistUtils;
+
+    @Resource
+    private TokenVersionUtils tokenVersionUtils;
 
     @Resource
     private UserActionLimitUtils userActionLimitUtils;
@@ -81,7 +85,9 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
         if(!userActionLimitUtils.tryAcquire(exsituser.getId(), MAX_PER_DAY)){
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS,"今日登录/登出次数已达上限,请明天再试");
         }
-        return jwtUtils.generateToken(exsituser.getId(), exsituser.getUsername(), exsituser.getRole());
+        //Token 中写入用户级版本号，改密后版本自增即可让该 Token 失效
+        return jwtUtils.generateToken(exsituser.getId(), exsituser.getUsername(),
+                exsituser.getRole(), exsituser.getTokenVersion());
     }
 
     // 退出登录：把当前 token 加入黑名单，使其立即失效
@@ -134,7 +140,12 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
             throw new BusinessException(ErrorCode.PARAM_ERROR, "旧密码不正确");
         }
         user.setPassword(passwordEncoder.encode(vo.getNewPassword()));
+        //改密后 Token 版本 +1：此前签发的所有旧 Token 版本不再匹配，立即失效
+        int newVersion = (user.getTokenVersion() == null ? 1 : user.getTokenVersion()) + 1;
+        user.setTokenVersion(newVersion);
         updateById(user);
+        //同步刷新缓存，避免拦截器仍读到旧版本号
+        tokenVersionUtils.refresh(userId, newVersion);
     }
 
     //查看他人主页

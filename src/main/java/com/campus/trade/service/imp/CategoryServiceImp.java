@@ -37,6 +37,7 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
 
     //添加分类
     @Override
+    @Transactional
     public void add(CategoryAddVo categoryAddVo) {
         Category category = new Category();
         BeanUtils.copyProperties(categoryAddVo, category);
@@ -47,6 +48,7 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
 
     //修改分类
     @Override
+    @Transactional
     public void update(CategoryUpdateVo categoryUpdateVo) {
         Category category = new Category();
         BeanUtils.copyProperties(categoryUpdateVo, category);
@@ -57,6 +59,7 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
 
     //删除分类
     @Override
+    @Transactional
     public void delete(Long id) {
         //先判断该分类下是否还有商品 有商品就不能删除，没有就可以删除
         LambdaQueryWrapper<Goods> queryWrapper = new LambdaQueryWrapper<>();

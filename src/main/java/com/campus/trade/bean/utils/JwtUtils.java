@@ -24,11 +24,13 @@ public class JwtUtils {
     }
 
     //生成token
-    public String generateToken(Long userId, String username, String role) {
+    public String generateToken(Long userId, String username, String role, Integer tokenVersion) {
         return Jwts.builder()
                 .claim("userId", userId)
                 .claim("username", username)
                 .claim("role", role)
+                // 用户级 Token 版本：改密后版本自增，旧 Token 版本不再匹配从而失效
+                .claim("tokenVersion", tokenVersion == null ? 1 : tokenVersion)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey())
@@ -54,5 +56,11 @@ public class JwtUtils {
     public String getRole(String token) {
         Claims claims = parseToken(token);
         return claims.get("role", String.class);
+    }
+
+    //获取用户级 Token 版本
+    public Integer getTokenVersion(String token) {
+        Claims claims = parseToken(token);
+        return claims.get("tokenVersion", Integer.class);
     }
 }

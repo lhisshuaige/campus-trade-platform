@@ -9,9 +9,12 @@ public class RedisContent {
     // 用户每日登录/登出计数 key 前缀（实际 key = 前缀 + userId + : + 日期）
     public static final String User_Loginout_Count_KEY = "user:loginout:count:";
 
+    // 用户级 Token 版本号缓存 key 前缀（实际 key = 前缀 + userId），改密后版本 +1 使旧 Token 失效
+    public static final String User_Token_Version_KEY = "user:tokenVersion:";
+
     // 商品下单分布式锁 key 前缀（实际 key = 前缀 + goodsId）
     public static final String Goods_Lock_KEY = "lock:goods:";
-    public static final String Order_NO_KEY="order:no:";
+    public static final String Order_NO_KEY = "order:no:";
 
 
     public static final String Goods_Detail_KEY = "goods:detail:";
@@ -20,4 +23,7 @@ public class RedisContent {
     public static final String Goods_Page_KEY   = "goods:page:";
     public static final String Collect_List_KEY = "collect:list:";
 
+    // 工具类，禁止实例化
+    private RedisContent() {
+    }
 }

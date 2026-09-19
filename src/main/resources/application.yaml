@@ -30,7 +30,6 @@ spring:
       timeout: 3000ms
 
 mybatis-plus:
-  mapper-locations: classpath:mybatis/*.xml
   type-aliases-package: com.campus.trade.bean.entry
   configuration:
     map-underscore-to-camel-case: true # 开启驼峰自动转换

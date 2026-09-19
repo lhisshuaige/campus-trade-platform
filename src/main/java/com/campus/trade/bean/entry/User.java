@@ -21,6 +21,8 @@ public class User {
     private String avatar;
     private String role;
     private Integer status;
+    // Token 版本号：每次改密 +1，拦截器比对版本使旧 Token 立即失效
+    private Integer tokenVersion;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 }
