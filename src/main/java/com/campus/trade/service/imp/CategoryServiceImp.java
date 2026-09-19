@@ -9,8 +9,9 @@ import com.campus.trade.bean.entry.Category;
 import com.campus.trade.bean.entry.Goods;
 import com.campus.trade.bean.utils.CacheUtils;
 import com.campus.trade.bean.utils.RedisContent;
-import com.campus.trade.bean.vo.request.category.CategoryAddVo;
-import com.campus.trade.bean.vo.request.category.CategoryUpdateVo;
+import com.campus.trade.bean.DTO.request.category.CategoryAddDTO;
+import com.campus.trade.bean.DTO.request.category.CategoryUpdateDTO;
+import com.campus.trade.bean.vo.CategoryVo;
 import com.campus.trade.mapper.CategoryMapper;
 import com.campus.trade.mapper.GoodsMapper;
 import com.campus.trade.service.CategoryService;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -38,9 +40,9 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
     //添加分类
     @Override
     @Transactional
-    public void add(CategoryAddVo categoryAddVo) {
+    public void add(CategoryAddDTO categoryAddDTO) {
         Category category = new Category();
-        BeanUtils.copyProperties(categoryAddVo, category);
+        BeanUtils.copyProperties(categoryAddDTO, category);
         save(category);
         //删除缓存 因为这里新添加了分类
         cacheUtils.evict(RedisContent.Category_List_KEY);
@@ -49,9 +51,9 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
     //修改分类
     @Override
     @Transactional
-    public void update(CategoryUpdateVo categoryUpdateVo) {
+    public void update(CategoryUpdateDTO categoryUpdateDTO) {
         Category category = new Category();
-        BeanUtils.copyProperties(categoryUpdateVo, category);
+        BeanUtils.copyProperties(categoryUpdateDTO, category);
         updateById(category);
         //删除缓存 因为这里修改了分类
         cacheUtils.evict(RedisContent.Category_List_KEY);
@@ -75,9 +77,15 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
 
     // 查询所有分类
     @Override
-    public List<Category> getAllCategory() {
-        return cacheUtils.getOrLoad(RedisContent.Category_List_KEY, CATEGORY_TTL,
+    public List<CategoryVo> getAllCategory() {
+        List<Category> categoryList = cacheUtils.getOrLoad(RedisContent.Category_List_KEY, CATEGORY_TTL,
                 json -> JSONUtil.toList(json, Category.class), this::loadFromDb);
+        //转成CategoryVo返回前端
+        return categoryList.stream().map(category -> {
+            CategoryVo vo = new CategoryVo();
+            BeanUtils.copyProperties(category, vo);
+            return vo;
+        }).collect(Collectors.toList());
     }
 
     private List<Category> loadFromDb() {

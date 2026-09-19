@@ -7,8 +7,8 @@ import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.entry.Comment;
 import com.campus.trade.bean.entry.Goods;
 import com.campus.trade.bean.entry.User;
-import com.campus.trade.bean.vo.request.comment.CommentAddVo;
-import com.campus.trade.bean.vo.request.comment.CommentVo;
+import com.campus.trade.bean.DTO.request.comment.CommentAddDTO;
+import com.campus.trade.bean.vo.CommentVo;
 import com.campus.trade.mapper.CommentMapper;
 import com.campus.trade.mapper.GoodsMapper;
 import com.campus.trade.mapper.UserMapper;
@@ -33,9 +33,9 @@ public class CommentServiceImp extends ServiceImpl<CommentMapper, Comment> imple
 
     //发表评论
     @Override
-    public void addComment(CommentAddVo commentAddVo, Long loginUserId) {
+    public void addComment(CommentAddDTO commentAddDTO, Long loginUserId) {
         Comment comment = new Comment();
-        BeanUtils.copyProperties(commentAddVo, comment);
+        BeanUtils.copyProperties(commentAddDTO, comment);
         comment.setUserId(loginUserId);
         save( comment);
     }
@@ -77,7 +77,7 @@ public class CommentServiceImp extends ServiceImpl<CommentMapper, Comment> imple
         //获取所有评论的userId，批量查询避免N+1
         List<Long> userIdList=commentList.stream().map(Comment::getUserId).toList();
         List<User> userList = userMapper.selectBatchIds(userIdList);
-        Map<Long,String> nickNameMap = userList.stream().collect(java.util.stream.Collectors.toMap(User::getId, User::getNickname));
+        Map<Long,String> nickNameMap = userList.stream().collect(java.util.stream.Collectors.toMap(User::getId, u -> u.getNickname() != null ? u.getNickname() : ""));
 
         //这里对后端数据库的数据库遍历 转换成前端数据 进行关联查询设置用户昵称
         for (Comment comment : commentList) {

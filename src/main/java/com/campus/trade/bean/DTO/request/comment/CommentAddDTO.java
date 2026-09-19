@@ -1,4 +1,4 @@
-package com.campus.trade.bean.vo.request.comment;
+package com.campus.trade.bean.DTO.request.comment;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -7,7 +7,7 @@ import lombok.Data;
 
 @Schema(description = "添加评论参数")
 @Data
-public class CommentAddVo {
+public class CommentAddDTO {
 
     @NotNull(message = "商品id不能为空")
     @Schema(description = "商品id")

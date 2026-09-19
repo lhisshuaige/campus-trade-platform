@@ -12,8 +12,8 @@ import com.campus.trade.bean.entry.User;
 import com.campus.trade.bean.utils.RedisContent;
 import com.campus.trade.bean.utils.RedisLockUtils;
 import com.campus.trade.bean.utils.RedisWorker;
-import com.campus.trade.bean.vo.request.order.OrderCreateVo;
-import com.campus.trade.bean.vo.result.OrderVo;
+import com.campus.trade.bean.DTO.request.order.OrderCreateDTO;
+import com.campus.trade.bean.vo.OrderVo;
 import com.campus.trade.mapper.GoodsMapper;
 import com.campus.trade.mapper.OrderMapper;
 import com.campus.trade.mapper.UserMapper;
@@ -24,12 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Service
@@ -46,7 +43,7 @@ public class OrderServiceImp extends ServiceImpl<OrderMapper, Order> implements 
     private RedisWorker redisWorker;
 
     @Override
-    public void createOrder(OrderCreateVo vo, Long buyerId) {
+    public void createOrder(OrderCreateDTO vo, Long buyerId) {
         // 1. 对该商品加分布式锁，避免并发下单
         String lockKey = RedisContent.Goods_Lock_KEY + vo.getGoodsId();
         String lockValue = redisLockUtils.tryLock(lockKey, Duration.ofSeconds(10));

@@ -43,7 +43,6 @@ public class CorsConfig implements WebMvcConfigurer {
                         "/v3/api-docs/**",
                         "/favicon.ico",
                         "/upload/**",
-                        "/file/upload",
                         // 商品浏览相关：无需登录即可浏览、搜索商品
                         "/goods/getAll",
                         "/goods/getDetail",

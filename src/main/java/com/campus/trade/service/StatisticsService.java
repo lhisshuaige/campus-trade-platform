@@ -1,6 +1,6 @@
 package com.campus.trade.service;
 
-import com.campus.trade.bean.vo.result.StatisticsOverviewVo;
+import com.campus.trade.bean.vo.StatisticsOverviewVo;
 
 import java.util.List;
 import java.util.Map;

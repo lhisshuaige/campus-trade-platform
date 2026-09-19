@@ -1,12 +1,13 @@
 package com.campus.trade.bean.exception;
 
 
-import com.campus.trade.bean.vo.result.MyResult;
+import com.campus.trade.bean.DTO.result.MyResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -36,6 +37,7 @@ public class GlobalExceptionHandler {
         }
         return MyResult.error(ErrorCode.PARAM_ERROR.getCode(), ErrorCode.PARAM_ERROR.getMsg(), errorMap);
     }
+
 
     //全局异常处理(最后保底)：记录完整堆栈，对外统一返回 500，不暴露内部细节
     @ExceptionHandler(Exception.class)

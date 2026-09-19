@@ -6,7 +6,7 @@ import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.entry.Collect;
 import com.campus.trade.bean.entry.Goods;
-import com.campus.trade.bean.vo.request.collect.CollectResponsVo;
+import com.campus.trade.bean.vo.CollectVo;
 import com.campus.trade.mapper.CollectMapper;
 import com.campus.trade.mapper.GoodsMapper;
 import com.campus.trade.service.CollectService;
@@ -79,7 +79,7 @@ public class CollectServiceImp extends ServiceImpl<CollectMapper, Collect> imple
     }
 
     @Override
-    public List<CollectResponsVo> getCollectList(Long userId) {
-        return baseMapper.getCollectResponsVoListByUserId(userId);
+    public List<CollectVo> getCollectList(Long userId) {
+        return baseMapper.getCollectVoListByUserId(userId);
     }
 }

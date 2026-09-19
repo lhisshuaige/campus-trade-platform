@@ -19,6 +19,13 @@ public class JwtUtils {
     @Value("${jwt.expiration}")
     private Long expiration;
 
+    @jakarta.annotation.PostConstruct
+    private void validateSecret() {
+        if (secret == null || secret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT_SECRET 未配置或长度不足 32 字节(HS256 要求)，请通过环境变量注入");
+        }
+    }
+
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }

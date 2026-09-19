@@ -1,12 +1,13 @@
 package com.campus.trade.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.entry.Goods;
 import com.campus.trade.bean.utils.Log;
-import com.campus.trade.bean.vo.request.goods.GoodsAddVo;
-import com.campus.trade.bean.vo.request.goods.GoodsPageQueryVo;
-import com.campus.trade.bean.vo.request.goods.GoodsUpdateVo;
-import com.campus.trade.bean.vo.result.MyResult;
+import com.campus.trade.bean.DTO.request.goods.GoodsAddDTO;
+import com.campus.trade.bean.DTO.request.goods.GoodsPageQueryDTO;
+import com.campus.trade.bean.DTO.request.goods.GoodsUpdateDTO;
+import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.vo.GoodsDetailVo;
+import com.campus.trade.bean.vo.GoodsVo;
 import com.campus.trade.service.GoodsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,18 +27,18 @@ public class GoodsController {
     @PostMapping("/add")
     @Operation(summary = "添加商品")
     @Log("添加商品")
-    public MyResult<Void> add(@Valid @RequestBody GoodsAddVo goodsAddVo, HttpServletRequest request) {
+    public MyResult<Void> add(@Valid @RequestBody GoodsAddDTO goodsAddDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        goodsService.addGoods(goodsAddVo, loginUserId);
+        goodsService.addGoods(goodsAddDTO, loginUserId);
         return MyResult.success();
     }
 
     @PostMapping("/update")
     @Operation(summary = "修改商品")
     @Log("修改商品")
-    public MyResult<Void> update(@Valid @RequestBody GoodsUpdateVo goodsUpdateVo, HttpServletRequest request) {
+    public MyResult<Void> update(@Valid @RequestBody GoodsUpdateDTO goodsUpdateDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        goodsService.updateGoods(goodsUpdateVo, loginUserId);
+        goodsService.updateGoods(goodsUpdateDTO, loginUserId);
         return MyResult.success();
     }
 
@@ -64,25 +65,25 @@ public class GoodsController {
     // 获取当前用户所有商品
     @GetMapping("/getAllByOwner")
     @Operation(summary = "获取当前用户所有商品")
-    public MyResult<Page<Goods>> getAllByOwner(@Valid GoodsPageQueryVo goodsPageQueryVo, HttpServletRequest request) {
+    public MyResult<Page<GoodsVo>> getAllByOwner(@Valid GoodsPageQueryDTO goodsPageQueryDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        Page<Goods> page = goodsService.getGoodsByOwner(goodsPageQueryVo, loginUserId);
+        Page<GoodsVo> page = goodsService.getGoodsByOwner(goodsPageQueryDTO, loginUserId);
         return MyResult.success(page);
     }
 
     //分页查询
     @GetMapping("/getAll")
     @Operation(summary = "获取所有商品(搜索+分类筛选)")
-    public MyResult<Page<Goods>> getAll(@Valid  GoodsPageQueryVo goodsPageQueryVo) {
-        Page<Goods> page = goodsService.getAllGoods(goodsPageQueryVo);
+    public MyResult<Page<GoodsVo>> getAll(@Valid  GoodsPageQueryDTO goodsPageQueryDTO) {
+        Page<GoodsVo> page = goodsService.getAllGoods(goodsPageQueryDTO);
         return MyResult.success(page);
     }
 
     //获取商品详细信息
     @GetMapping("/getDetail")
     @Operation(summary = "获取商品详细信息")
-    public MyResult<Goods> getDetail(@RequestParam("id") Long GoodsId) {
-        Goods goods = goodsService.getGoodsDetail(GoodsId);
+    public MyResult<GoodsDetailVo> getDetail(@RequestParam("id") Long GoodsId) {
+        GoodsDetailVo goods = goodsService.getGoodsDetail(GoodsId);
         return MyResult.success(goods);
     }
 }

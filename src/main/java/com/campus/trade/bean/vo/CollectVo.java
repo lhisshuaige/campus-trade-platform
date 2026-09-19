@@ -1,14 +1,15 @@
-package com.campus.trade.bean.vo.request.collect;
+package com.campus.trade.bean.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Schema(description = "收藏的商品返回给前端的参数")
 @Data
-public class CollectResponsVo {
+public class CollectVo {
+
     @Schema(description = "收藏id")
     private Long id;
 
@@ -25,5 +26,6 @@ public class CollectResponsVo {
     private String imgUrl;
 
     @Schema(description = "商品收藏时间")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 }

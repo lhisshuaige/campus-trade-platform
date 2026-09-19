@@ -1,4 +1,4 @@
-package com.campus.trade.bean.vo.result;
+package com.campus.trade.bean.DTO.result;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;

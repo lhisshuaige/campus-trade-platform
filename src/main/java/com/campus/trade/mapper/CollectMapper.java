@@ -3,7 +3,7 @@ package com.campus.trade.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.campus.trade.bean.entry.Collect;
-import com.campus.trade.bean.vo.request.collect.CollectResponsVo;
+import com.campus.trade.bean.vo.CollectVo;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -19,7 +19,7 @@ public interface CollectMapper extends BaseMapper<Collect> {
             "FROM collect c " +
             "LEFT JOIN goods g ON c.goods_id = g.id " +
             "WHERE c.user_id = #{userId} ORDER BY c.create_time DESC")
-    List<CollectResponsVo> getCollectResponsVoListByUserId(@Param("userId") Long userId);
+    List<CollectVo> getCollectVoListByUserId(@Param("userId") Long userId);
 
 
 

@@ -1,8 +1,8 @@
 package com.campus.trade.controller;
 
-import com.campus.trade.bean.vo.request.collect.CollectAddVo;
-import com.campus.trade.bean.vo.request.collect.CollectResponsVo;
-import com.campus.trade.bean.vo.result.MyResult;
+import com.campus.trade.bean.DTO.request.collect.CollectAddDTO;
+import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.vo.CollectVo;
 import com.campus.trade.service.CollectService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,17 +23,17 @@ public class CollectController {
 
     @Operation(summary = "添加收藏")
     @PostMapping("/add")
-    public MyResult<String> addCollect(@Valid @RequestBody CollectAddVo collectAddVo, HttpServletRequest request) {
+    public MyResult<String> addCollect(@Valid @RequestBody CollectAddDTO collectAddDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        collectService.addCollect(loginUserId, collectAddVo.getGoodsId());
+        collectService.addCollect(loginUserId, collectAddDTO.getGoodsId());
         return MyResult.success("收藏成功");
     }
 
     @Operation(summary = "取消收藏")
     @DeleteMapping("/cancel")
-    public MyResult<String> cancelCollect(@Valid @RequestBody CollectAddVo collectAddVo, HttpServletRequest request) {
+    public MyResult<String> cancelCollect(@Valid @RequestBody CollectAddDTO collectAddDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        collectService.cancelCollect(loginUserId, collectAddVo.getGoodsId());
+        collectService.cancelCollect(loginUserId, collectAddDTO.getGoodsId());
         return MyResult.success("取消收藏成功");
     }
 
@@ -46,7 +46,7 @@ public class CollectController {
 
     @Operation(summary = "获取收藏列表")
     @GetMapping("/mylist")
-    public MyResult<List<CollectResponsVo>> getCollectList(HttpServletRequest request) {
+    public MyResult<List<CollectVo>> getCollectList(HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         return MyResult.success(collectService.getCollectList(loginUserId));
     }

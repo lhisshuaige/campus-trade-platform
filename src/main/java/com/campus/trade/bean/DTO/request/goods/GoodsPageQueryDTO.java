@@ -1,4 +1,4 @@
-package com.campus.trade.bean.vo.request.goods;
+package com.campus.trade.bean.DTO.request.goods;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
@@ -7,7 +7,7 @@ import lombok.Data;
 
 @Data
 @Schema(description = "商品分页查询参数")
-public class GoodsPageQueryVo {
+public class GoodsPageQueryDTO {
 
     @Schema(description = "商品分类id,可以不传")
     private Long categoryId;

@@ -1,4 +1,4 @@
-package com.campus.trade.bean.vo.request.user;
+package com.campus.trade.bean.DTO.request.user;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
@@ -6,7 +6,7 @@ import lombok.Data;
 
 @Schema(description = "修改用户资料请求参数")
 @Data
-public class UserUpdateVo {
+public class UserUpdateDTO {
 
     @Schema(description = "昵称")
     private String nickname;

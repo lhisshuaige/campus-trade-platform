@@ -1,6 +1,6 @@
 package com.campus.trade.mapper;
 
-import com.campus.trade.bean.vo.result.StatisticsOverviewVo;
+import com.campus.trade.bean.vo.StatisticsOverviewVo;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;

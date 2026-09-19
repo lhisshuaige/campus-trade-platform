@@ -7,11 +7,14 @@ import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.utils.RequireRole;
-import com.campus.trade.bean.vo.result.MyResult;
+import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.vo.UserProfileVo;
+import com.campus.trade.bean.vo.UserVo;
 import com.campus.trade.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,18 +28,22 @@ public class AdminController {
 
     @GetMapping("/user/page")
     @Operation(summary = "分页查询用户")
-    public MyResult<Page<User>> userPage(
+    public MyResult<Page<UserVo>> userPage(
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize) {
         Page<User> page = userService.page(new Page<>(pageNum, pageSize));
-        // 脱敏，不返回密码
-        page.getRecords().forEach(u -> u.setPassword(null));
-        return MyResult.success(page);
+        //转成UserVo返回前端，脱敏，不返回密码/tokenVersion等敏感字段
+        Page<UserVo> voPage = (Page<UserVo>) page.convert(user -> {
+            UserVo vo = new UserVo();
+            BeanUtils.copyProperties(user, vo);
+            return vo;
+        });
+        return MyResult.success(voPage);
     }
 
     @GetMapping("/user/{userId}")
     @Operation(summary = "查看指定用户信息")
-    public MyResult<User> getUser(@PathVariable("userId") Long userId) {
+    public MyResult<UserProfileVo> getUser(@PathVariable("userId") Long userId) {
         return MyResult.success(userService.getUserProfile(userId));
     }
 

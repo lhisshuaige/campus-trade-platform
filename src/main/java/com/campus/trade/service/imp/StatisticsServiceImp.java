@@ -2,7 +2,7 @@ package com.campus.trade.service.imp;
 
 import cn.hutool.json.JSONUtil;
 import com.campus.trade.bean.utils.CacheUtils;
-import com.campus.trade.bean.vo.result.StatisticsOverviewVo;
+import com.campus.trade.bean.vo.StatisticsOverviewVo;
 import com.campus.trade.mapper.StatisticsMapper;
 import com.campus.trade.service.StatisticsService;
 import jakarta.annotation.Resource;

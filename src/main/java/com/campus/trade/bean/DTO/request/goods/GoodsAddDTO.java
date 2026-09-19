@@ -1,4 +1,4 @@
-package com.campus.trade.bean.vo.request.goods;
+package com.campus.trade.bean.DTO.request.goods;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 
 @Schema(description = "添加商品请求参数")
 @Data
-public class GoodsAddVo {
+public class GoodsAddDTO {
 
     @NotNull(message = "商品分类id不能为空,请选择商品id")
     @Schema(description = "商品分类id")

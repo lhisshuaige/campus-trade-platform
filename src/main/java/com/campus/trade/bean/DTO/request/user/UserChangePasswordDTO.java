@@ -1,4 +1,4 @@
-package com.campus.trade.bean.vo.request.user;
+package com.campus.trade.bean.DTO.request.user;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -7,7 +7,7 @@ import lombok.Data;
 
 @Schema(description = "修改密码请求参数")
 @Data
-public class UserChangePasswordVo {
+public class UserChangePasswordDTO {
 
     @NotBlank(message = "旧密码不能为空")
     @Schema(description = "旧密码")

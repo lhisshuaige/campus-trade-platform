@@ -1,9 +1,9 @@
 package com.campus.trade.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.vo.request.order.OrderCreateVo;
-import com.campus.trade.bean.vo.result.MyResult;
-import com.campus.trade.bean.vo.result.OrderVo;
+import com.campus.trade.bean.DTO.request.order.OrderCreateDTO;
+import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.vo.OrderVo;
 import com.campus.trade.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,7 +22,7 @@ public class OrderController {
 
     @PostMapping("/create")
     @Operation(summary = "创建订单（买家下单）")
-    public MyResult<Void> create(@Valid @RequestBody OrderCreateVo vo, HttpServletRequest request) {
+    public MyResult<Void> create(@Valid @RequestBody OrderCreateDTO vo, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         orderService.createOrder(vo, loginUserId);
         return MyResult.success();

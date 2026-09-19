@@ -1,4 +1,4 @@
-package com.campus.trade.bean.vo.request.comment;
+package com.campus.trade.bean.vo;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;

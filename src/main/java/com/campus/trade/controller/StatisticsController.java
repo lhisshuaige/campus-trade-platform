@@ -2,8 +2,8 @@ package com.campus.trade.controller;
 
 import com.campus.trade.bean.entry.Role;
 import com.campus.trade.bean.utils.RequireRole;
-import com.campus.trade.bean.vo.result.MyResult;
-import com.campus.trade.bean.vo.result.StatisticsOverviewVo;
+import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.vo.StatisticsOverviewVo;
 import com.campus.trade.service.StatisticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

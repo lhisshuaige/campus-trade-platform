@@ -9,10 +9,12 @@ import com.campus.trade.bean.utils.JwtUtils;
 import com.campus.trade.bean.utils.TokenBlacklistUtils;
 import com.campus.trade.bean.utils.TokenVersionUtils;
 import com.campus.trade.bean.utils.UserActionLimitUtils;
-import com.campus.trade.bean.vo.request.user.UserChangePasswordVo;
-import com.campus.trade.bean.vo.request.user.UserLoginVo;
-import com.campus.trade.bean.vo.request.user.UserRegisterVo;
-import com.campus.trade.bean.vo.request.user.UserUpdateVo;
+import com.campus.trade.bean.DTO.request.user.UserChangePasswordDTO;
+import com.campus.trade.bean.DTO.request.user.UserLoginDTO;
+import com.campus.trade.bean.DTO.request.user.UserRegisterDTO;
+import com.campus.trade.bean.DTO.request.user.UserUpdateDTO;
+import com.campus.trade.bean.vo.UserProfileVo;
+import com.campus.trade.bean.vo.UserVo;
 import com.campus.trade.mapper.UserMapper;
 import com.campus.trade.service.UserService;
 import jakarta.annotation.Resource;
@@ -44,18 +46,18 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
 
     // 用户注册
     @Override
-    public void register(UserRegisterVo userRegisterVo) {
+    public void register(UserRegisterDTO userRegisterDTO) {
         //判断用户名是否已存在
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(User::getUsername, userRegisterVo.getUsername());
+        queryWrapper.eq(User::getUsername, userRegisterDTO.getUsername());
         User exsituser = getOne(queryWrapper);
         if(exsituser != null){
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,"用户名已存在");
         }
         User user = new User();
-        BeanUtils.copyProperties(userRegisterVo, user);
+        BeanUtils.copyProperties(userRegisterDTO, user);
         //密码BCrypt加密存储，不能明文入库
-        user.setPassword(passwordEncoder.encode(userRegisterVo.getPassword()));
+        user.setPassword(passwordEncoder.encode(userRegisterDTO.getPassword()));
         //设置状态 默认普通用户 正常状态
         user.setStatus(1);
         user.setRole("user");
@@ -66,16 +68,16 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
 
     // 用户登录
     @Override
-    public String login(UserLoginVo userLoginVo) {
+    public String login(UserLoginDTO userLoginDTO) {
         LambdaQueryWrapper<User> wrapper=new LambdaQueryWrapper<>();
-        wrapper.eq(User::getUsername,userLoginVo.getUsername());
+        wrapper.eq(User::getUsername,userLoginDTO.getUsername());
         User exsituser = getOne(wrapper);
+        // 统一错误提示，避免用户名枚举；用户不存在与密码错误返回同一句话
         if(exsituser == null){
-            throw new BusinessException(ErrorCode.PARAM_ERROR,"用户名不存在");
+            throw new BusinessException(ErrorCode.PARAM_ERROR,"用户名或密码错误");
         }
-        //判断密码是否正确(BCrypt匹配)
-        if(!passwordEncoder.matches(userLoginVo.getPassword(), exsituser.getPassword())){
-            throw new BusinessException(ErrorCode.PARAM_ERROR,"密码错误");
+        if(!passwordEncoder.matches(userLoginDTO.getPassword(), exsituser.getPassword())){
+            throw new BusinessException(ErrorCode.PARAM_ERROR,"用户名或密码错误");
         }
         //判断是否被禁用
         if(exsituser.getStatus() == 0){
@@ -100,19 +102,20 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
 
     //获取当前登录用户信息
     @Override
-    public User getUserInfo(Long userId) {
+    public UserVo getUserInfo(Long userId) {
         User user = getById(userId);
         if (user == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
         }
-        //脱敏，不返回密码
-        user.setPassword(null);
-        return user;
+        //转成UserVo返回前端，避免泄露密码、tokenVersion等敏感字段
+        UserVo vo = new UserVo();
+        BeanUtils.copyProperties(user, vo);
+        return vo;
     }
 
     //修改个人资料
     @Override
-    public void updateUserInfo(Long userId, UserUpdateVo vo) {
+    public void updateUserInfo(Long userId, UserUpdateDTO vo) {
         User user = getById(userId);
         if (user == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
@@ -131,7 +134,7 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
 
     //修改密码
     @Override
-    public void changePassword(Long userId, UserChangePasswordVo vo) {
+    public void changePassword(Long userId, UserChangePasswordDTO vo) {
         User user = getById(userId);
         if (user == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
@@ -150,13 +153,14 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
 
     //查看他人主页
     @Override
-    public User getUserProfile(Long userId) {
+    public UserProfileVo getUserProfile(Long userId) {
         User user = getById(userId);
         if (user == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
         }
-        //脱敏，不返回密码
-        user.setPassword(null);
-        return user;
+        //转成UserProfileVo返回前端，他人主页不返回密码/手机号/tokenVersion等敏感字段
+        UserProfileVo vo = new UserProfileVo();
+        BeanUtils.copyProperties(user, vo);
+        return vo;
     }
 }

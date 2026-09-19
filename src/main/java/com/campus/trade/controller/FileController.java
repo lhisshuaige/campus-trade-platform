@@ -2,7 +2,7 @@ package com.campus.trade.controller;
 
 import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.exception.ErrorCode;
-import com.campus.trade.bean.vo.result.MyResult;
+import com.campus.trade.bean.DTO.result.MyResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

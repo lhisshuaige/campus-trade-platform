@@ -1,8 +1,8 @@
 package com.campus.trade.controller;
 
-import com.campus.trade.bean.vo.request.comment.CommentAddVo;
-import com.campus.trade.bean.vo.request.comment.CommentVo;
-import com.campus.trade.bean.vo.result.MyResult;
+import com.campus.trade.bean.DTO.request.comment.CommentAddDTO;
+import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.vo.CommentVo;
 import com.campus.trade.service.CommentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,9 +23,9 @@ public class CommentController {
     //发表评论
     @PostMapping("/add")
     @Operation(summary = "发表评论")
-    public MyResult<Void> addComment(@Valid @RequestBody CommentAddVo commentAddVo, HttpServletRequest request) {
+    public MyResult<Void> addComment(@Valid @RequestBody CommentAddDTO commentAddDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        commentService.addComment(commentAddVo, loginUserId);
+        commentService.addComment(commentAddDTO, loginUserId);
         return MyResult.success();
     }
 
