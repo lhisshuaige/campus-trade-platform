@@ -55,7 +55,7 @@ public class CommentServiceImp extends ServiceImpl<CommentMapper, Comment> imple
 
     //根据商品id查询该商品的所有评论（一对多）
     @Override
-    public List<CommentVo> getCommentVoList(Long goodsId) {
+    public List<CommentVo> getCommentVoList(Long goodsId, Long loginUserId) {
         //先判断该商品是否存在
         Goods goods = goodsMapper.selectById(goodsId);
         if (goods==null){
@@ -86,6 +86,8 @@ public class CommentServiceImp extends ServiceImpl<CommentMapper, Comment> imple
             //这里进行多表关联查询用户昵称
             String nickname = nickNameMap.get(comment.getUserId());
             commentVo.setNickname(nickname);
+            //标记是否当前登录用户所发,供前端决定是否展示删除按钮;匿名访问时恒为false
+            commentVo.setIsOwner(loginUserId != null && loginUserId.equals(comment.getUserId()));
             commentVoList.add(commentVo);
         }
         return commentVoList;

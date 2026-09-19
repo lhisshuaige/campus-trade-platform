@@ -41,8 +41,9 @@ public class CommentController {
     //根据商品id查询该商品下的所有评论（一对多）
     @GetMapping("/list")
     @Operation(summary = "根据商品id查询该商品下的所有评论")
-    public MyResult<List<CommentVo>> getCommentVoList(@RequestParam("id") Long goodsId) {
-        List<CommentVo> commentVoList = commentService.getCommentVoList(goodsId);
+    public MyResult<List<CommentVo>> getCommentVoList(@RequestParam("id") Long goodsId, HttpServletRequest request) {
+        Long loginUserId = (Long) request.getAttribute("loginUserId");
+        List<CommentVo> commentVoList = commentService.getCommentVoList(goodsId, loginUserId);
         return MyResult.success(commentVoList);
     }
 }

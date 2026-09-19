@@ -15,14 +15,14 @@ public class CommentVo {
     @Schema(description = "商品id")
     private Long goodsId;
 
-    @Schema(description = "评论人id")
-    private Long userId;
-
     @Schema(description = "评论人昵称")
     private String nickname;
 
     @Schema(description = "评论内容")
     private String content;
+
+    @Schema(description = "是否当前登录用户所发,用于前端判断是否展示删除按钮")
+    private Boolean isOwner;
 
 
     @Schema(description = "评论时间")

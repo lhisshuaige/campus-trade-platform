@@ -17,6 +17,9 @@ public class CorsConfig implements WebMvcConfigurer {
     @Resource
     private RoleInterceptor roleInterceptor;
 
+    @Resource
+    private OptionalAuthInterceptor optionalAuthInterceptor;
+
     @Value("${upload.path}")
     private String uploadPath;
 
@@ -31,6 +34,15 @@ public class CorsConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // 可选认证拦截器：仅为公开接口注入"可选"登录态（有 token 且有效才注入，否则按匿名），最先执行
+        registry.addInterceptor(optionalAuthInterceptor)
+                .addPathPatterns(
+                        "/goods/getAll",
+                        "/goods/getDetail",
+                        "/category/getAll",
+                        "/comment/list",
+                        "/user/profile/**"
+                ).order(0);
         // 认证拦截器：校验登录状态（先执行）
         registry.addInterceptor(jwtInterceptor)
                 .addPathPatterns("/**")
