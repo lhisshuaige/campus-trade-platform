@@ -28,6 +28,25 @@ spring:
       database: 3
       password: ${REDIS_PASSWORD:}
       timeout: 3000ms
+  # RabbitMQ：订单超时未确认自动取消
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:}
+    publisher-confirm-type: correlated   #只保证到达 broker，不保证消费成功，所以仍需兜底扫描
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: auto
+        #失败不重回队头：否则一条毒消息会把消费者打死循环，必须走 DLX 人工处理
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 2000ms
+        #本机没装 MQ 时设为 false，消费者不启动，不刷重连日志
+        auto-startup: ${MQ_LISTENER_AUTO_STARTUP:true}
 
 mybatis-plus:
   type-aliases-package: com.campus.trade.bean.entry
@@ -61,3 +80,9 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+
+app:
+  order-timeout:
+    minutes: 30                    #下单后多久未确认自动取消（同时用于队列 TTL）
+    scan-interval-ms: 300000       #兜底扫描间隔
+    mq-enabled: true               #false = 不发延迟消息，完全靠兜底扫描

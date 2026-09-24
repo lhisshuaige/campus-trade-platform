@@ -94,6 +94,21 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- Redisson：只用 RLock + 看门狗续期。
+             故意不用 redisson-spring-boot-starter：它会带 redisson-spring-data-<最新版>，
+             与本项目 Spring Boot 3.1.5 需要手动 exclusions 降级，而我们不需要 spring-cache 集成 -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson</artifactId>
+            <version>3.27.2</version>
+        </dependency>
+
+        <!-- RabbitMQ：订单超时未确认自动取消（TTL + 死信队列） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
         <!-- 这是swagger的依赖-->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>

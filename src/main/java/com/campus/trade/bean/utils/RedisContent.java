@@ -23,6 +23,11 @@ public class RedisContent {
     public static final String Goods_Page_KEY   = "goods:page:";
     public static final String Collect_List_KEY = "collect:list:";
 
+    // 商品详情缓存 key：统一在此拼装，避免各 Service 各拼一份导致 evict 漏删
+    public static String goodsDetailKey(Long goodsId) {
+        return Goods_Detail_KEY + goodsId;
+    }
+
     // 工具类，禁止实例化
     private RedisContent() {
     }

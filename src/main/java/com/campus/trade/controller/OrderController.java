@@ -5,6 +5,7 @@ import com.campus.trade.bean.DTO.request.order.OrderCreateDTO;
 import com.campus.trade.bean.DTO.result.MyResult;
 import com.campus.trade.bean.vo.OrderVo;
 import com.campus.trade.service.OrderService;
+import com.campus.trade.service.imp.OrderTradeFacade;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
@@ -20,27 +21,31 @@ public class OrderController {
     @Resource
     private OrderService orderService;
 
+    //带并发协议与提交后消息的写操作统一走编排层，由它保证“锁包住事务”
+    @Resource
+    private OrderTradeFacade orderTradeFacade;
+
     @PostMapping("/create")
     @Operation(summary = "创建订单（买家下单）")
-    public MyResult<Void> create(@Valid @RequestBody OrderCreateDTO vo, HttpServletRequest request) {
+    public MyResult<Long> create(@Valid @RequestBody OrderCreateDTO vo, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        orderService.createOrder(vo, loginUserId);
-        return MyResult.success();
+        //返回订单 id：前端拿到才能跳详情页，也免得再查一次“我最近一笔订单”
+        return MyResult.success(orderTradeFacade.createOrder(vo, loginUserId));
     }
 
     @PutMapping("/confirm")
     @Operation(summary = "卖家确认订单")
     public MyResult<Void> confirm(@RequestParam("id") Long orderId, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        orderService.confirmOrder(orderId, loginUserId);
+        orderTradeFacade.confirmOrder(orderId, loginUserId);
         return MyResult.success();
     }
 
     @PutMapping("/complete")
-    @Operation(summary = "确认完成交易")
+    @Operation(summary = "确认完成交易（买家确认收货）")
     public MyResult<Void> complete(@RequestParam("id") Long orderId, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        orderService.completeOrder(orderId, loginUserId, loginUserId);
+        orderTradeFacade.completeOrder(orderId, loginUserId);
         return MyResult.success();
     }
 
@@ -48,7 +53,7 @@ public class OrderController {
     @Operation(summary = "取消订单")
     public MyResult<Void> cancel(@RequestParam("id") Long orderId, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        orderService.cancelOrder(orderId, loginUserId);
+        orderTradeFacade.cancelOrder(orderId, loginUserId);
         return MyResult.success();
     }
 

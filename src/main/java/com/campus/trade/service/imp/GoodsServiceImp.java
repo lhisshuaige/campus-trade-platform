@@ -1,7 +1,9 @@
 package com.campus.trade.service.imp;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.campus.trade.bean.entry.Order;
 import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.entry.Goods;
@@ -11,6 +13,7 @@ import com.campus.trade.bean.DTO.request.goods.GoodsUpdateDTO;
 import com.campus.trade.bean.vo.GoodsDetailVo;
 import com.campus.trade.bean.vo.GoodsVo;
 import com.campus.trade.mapper.GoodsMapper;
+import com.campus.trade.mapper.OrderMapper;
 import com.campus.trade.service.GoodsService;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campus.trade.bean.utils.CacheUtils;
@@ -29,10 +32,14 @@ public class GoodsServiceImp extends ServiceImpl<GoodsMapper, Goods> implements 
     @Resource
     private CacheUtils cacheUtils;
 
+    //只用于"删除商品前预检是否已有订单引用"，注入 Mapper 而不是 Service，避免和 OrderServiceImp 形成循环依赖
+    @Resource
+    private OrderMapper orderMapper;
+
     private static final Duration GOODS_DETAIL_TTL = Duration.ofMinutes(30);
 
     private String detailKey(Long id) {
-        return RedisContent.Goods_Detail_KEY + id;
+        return RedisContent.goodsDetailKey(id);
     }
 
     //添加商品
@@ -42,9 +49,11 @@ public class GoodsServiceImp extends ServiceImpl<GoodsMapper, Goods> implements 
         BeanUtils.copyProperties(goodsAddDTO, goods);
         //绑定用户id
         goods.setUserId(loginUserId);
-        //设置商品状态
-        goods.setStatus(1);
+        //设置商品状态 新发布默认在售
+        goods.setStatus(Goods.STATUS_ON_SALE);
         save(goods);
+        //新商品 id 可能命中过"空值缓存(防穿透)"，这里一并失效
+        cacheUtils.evictAfterCommit(detailKey(goods.getId()));
     }
 
     //修改商品
@@ -61,6 +70,8 @@ public class GoodsServiceImp extends ServiceImpl<GoodsMapper, Goods> implements 
             throw new BusinessException(ErrorCode.FORBIDDEN,"商品不属于当前用户,无法修改");
         }
         updateById(goods);
+        //写库后失效详情缓存，否则脏读窗口最长 30 分钟
+        cacheUtils.evictAfterCommit(detailKey(goods.getId()));
     }
 
     //修改商品状态
@@ -73,11 +84,23 @@ public class GoodsServiceImp extends ServiceImpl<GoodsMapper, Goods> implements 
         if(!goods.getUserId().equals(loginUserId)){
             throw new BusinessException(ErrorCode.FORBIDDEN,"商品不属于当前用户,无法修改商品状态");
         }
-        if(status!=0&&status!=1&&status!=2){
-            throw new BusinessException(ErrorCode.PARAM_ERROR,"商品状态错误,请检查");
+        //取值域必须与 init.sql 的 chk_goods_status 一致，用常量避免两处漂移
+        //手工只能 上架(1)/下架(0)；已售出(2) 由订单占用，只能由下单/取消流程维护
+        //放开 2 等于允许卖家手工“宣布售出”，或把在途订单的商品捞回在售 → 一物多卖
+        if(status==null||(status!=Goods.STATUS_OFF&&status!=Goods.STATUS_ON_SALE)){
+            throw new BusinessException(ErrorCode.PARAM_ERROR,"只能上架(1)或下架(0)，售出状态由系统维护");
         }
-        goods.setStatus(status);
-        updateById(goods);
+        // CAS：排除“已售出”。原来用 updateById 是按主键无脑覆盖，卖家一次上架就能击穿下单流程
+        //用 update(null, wrapper) 只 SET status 一列，冲突面比写回整份快照小
+        LambdaUpdateWrapper<Goods> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(Goods::getId, GoodsId)
+                .ne(Goods::getStatus, Goods.STATUS_SOLD)
+                .set(Goods::getStatus, status);
+        if (baseMapper.update(null, wrapper) == 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "商品已售出或状态已变更，无法修改");
+        }
+        //上架/下架都会影响详情页展示
+        cacheUtils.evictAfterCommit(detailKey(GoodsId));
     }
 
     //删除商品
@@ -91,7 +114,17 @@ public class GoodsServiceImp extends ServiceImpl<GoodsMapper, Goods> implements 
         if(!goods.getUserId().equals(loginUserId)){
             throw new BusinessException(ErrorCode.FORBIDDEN,"商品不属于当前用户,无法删除");
         }
+        //FK fk_order_goods 是 ON DELETE RESTRICT：有订单引用时数据库会直接报错，
+        //不预检就删会抛 DataIntegrityViolationException 落到全局兜底 500，用户看不懂。
+        //这里与"分类下有商品禁止删除"同理：DB 约束是最后防线，Service 预检负责给出人话。
+        Long orderCount = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
+                .eq(Order::getGoodsId, GoodsId));
+        if (orderCount != null && orderCount > 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "该商品已产生交易记录，不可删除，如需隐藏请改为下架");
+        }
         removeById(GoodsId);
+        //商品已删除，缓存不清掉详情页还能展示 30 分钟
+        cacheUtils.evictAfterCommit(detailKey(GoodsId));
     }
     //获取自身商品（分页查询）
     @Override
@@ -134,7 +167,7 @@ public class GoodsServiceImp extends ServiceImpl<GoodsMapper, Goods> implements 
         if(goodsPageQueryDTO.getUserId()!=null){
             queryWrapper.eq(Goods::getUserId,goodsPageQueryDTO.getUserId());
         }
-        queryWrapper.eq(Goods::getStatus,1);
+        queryWrapper.eq(Goods::getStatus, Goods.STATUS_ON_SALE);
         queryWrapper.orderByDesc(Goods::getCreateTime);
         Page<Goods> goodsPage = page(page1, queryWrapper);
         //转成GoodsVo返回前端
@@ -166,7 +199,7 @@ public class GoodsServiceImp extends ServiceImpl<GoodsMapper, Goods> implements 
             limit = 10;
         }
         LambdaQueryWrapper<Goods> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Goods::getStatus, 1)   // 只统计在售商品，如需要可去掉
+        wrapper.eq(Goods::getStatus, Goods.STATUS_ON_SALE)   // 只统计在售商品，如需要可去掉
                .orderByDesc(Goods::getCollectCount)
                .orderByDesc(Goods::getCreateTime)
                .last("LIMIT " + limit);   // limit 已做范围校验，无注入风险

@@ -6,11 +6,15 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -33,6 +37,17 @@ public class CacheUtils {
                 t.setDaemon(true);
                 return t;
             });
+
+    // 延迟双删调度线程池（守护线程，只负责"稍后再补删一次"）
+    private static final ScheduledExecutorService EVICT_SCHEDULER = Executors.newScheduledThreadPool(
+            2, r -> {
+                Thread t = new Thread(r, "cache-evict-" + THREAD_SEQ.incrementAndGet());
+                t.setDaemon(true);
+                return t;
+            });
+
+    // 延迟双删的等待时间：需大于"一次回源查库 + 回填缓存"的最坏耗时
+    private static final long DELAYED_EVICT_MILLIS = 500L;
 
     // 冷启动抢锁重建的锁 TTL
     private static final Duration LOCK_TTL = Duration.ofSeconds(10);
@@ -116,6 +131,36 @@ public class CacheUtils {
      */
     public void evict(String key) {
         redisDelete(key);
+    }
+
+    /**
+     * 写库之后失效缓存：事务提交后删除 + 延迟双删。
+     * <p>
+     * 为什么不能在事务里直接 evict：先删缓存、后提交事务之间存在间隙，
+     * 并发读会查到"尚未更新的旧库数据"并把它回填进缓存，事务提交后缓存依旧是脏的。
+     * <p>
+     * 策略：
+     * 1) 有事务上下文：注册 afterCommit 回调，等 DB 对外可见再删；事务回滚则不删（数据没变，缓存仍有效）
+     * 2) 无事务上下文（单条 auto-commit 写）：直接删
+     * 3) 两种情况都再延迟补删一次，兜住"删除瞬间仍在飞行中的旧读请求"回填的旧值；
+     *    补删若命中已被刷新的好数据，也只是多一次回源，不影响正确性
+     */
+    public void evictAfterCommit(String key) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    doEvictWithDelay(key);
+                }
+            });
+        } else {
+            doEvictWithDelay(key);
+        }
+    }
+
+    private void doEvictWithDelay(String key) {
+        evict(key);
+        EVICT_SCHEDULER.schedule(() -> evict(key), DELAYED_EVICT_MILLIS, TimeUnit.MILLISECONDS);
     }
 
     // 异步重建：再查一次，避免重复重建

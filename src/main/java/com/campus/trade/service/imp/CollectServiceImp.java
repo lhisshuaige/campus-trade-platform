@@ -7,6 +7,8 @@ import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.entry.Collect;
 import com.campus.trade.bean.entry.Goods;
 import com.campus.trade.bean.vo.CollectVo;
+import com.campus.trade.bean.utils.CacheUtils;
+import com.campus.trade.bean.utils.RedisContent;
 import com.campus.trade.mapper.CollectMapper;
 import com.campus.trade.mapper.GoodsMapper;
 import com.campus.trade.service.CollectService;
@@ -22,6 +24,9 @@ public class CollectServiceImp extends ServiceImpl<CollectMapper, Collect> imple
 
     @Resource
     private GoodsMapper goodsMapper;
+
+    @Resource
+    private CacheUtils cacheUtils;
 
     //添加收藏
     @Override
@@ -52,6 +57,8 @@ public class CollectServiceImp extends ServiceImpl<CollectMapper, Collect> imple
         }
         //收藏成功，商品收藏数 +1
         goodsMapper.incrCollectCount(goodsId);
+        //collect_count 属于详情缓存字段，不同步失效会一直脏 30 分钟
+        cacheUtils.evictAfterCommit(RedisContent.goodsDetailKey(goodsId));
     }
 
     //取消收藏
@@ -67,6 +74,7 @@ public class CollectServiceImp extends ServiceImpl<CollectMapper, Collect> imple
         remove(wrapper);
         //取消收藏成功，商品收藏数 -1
         goodsMapper.decrCollectCount(goodsId);
+        cacheUtils.evictAfterCommit(RedisContent.goodsDetailKey(goodsId));
     }
 
     //判断是否收藏

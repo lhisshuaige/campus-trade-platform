@@ -44,8 +44,8 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
         Category category = new Category();
         BeanUtils.copyProperties(categoryAddDTO, category);
         save(category);
-        //删除缓存 因为这里新添加了分类
-        cacheUtils.evict(RedisContent.Category_List_KEY);
+        //删除缓存 因为这里新添加了分类（提交后删，避免事务内删被并发读回填旧值）
+        cacheUtils.evictAfterCommit(RedisContent.Category_List_KEY);
     }
 
     //修改分类
@@ -56,7 +56,7 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
         BeanUtils.copyProperties(categoryUpdateDTO, category);
         updateById(category);
         //删除缓存 因为这里修改了分类
-        cacheUtils.evict(RedisContent.Category_List_KEY);
+        cacheUtils.evictAfterCommit(RedisContent.Category_List_KEY);
     }
 
     //删除分类
@@ -72,7 +72,7 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
         }
         removeById(id);
         //删除缓存 因为这里删除了分类
-        cacheUtils.evict(RedisContent.Category_List_KEY);
+        cacheUtils.evictAfterCommit(RedisContent.Category_List_KEY);
     }
 
     // 查询所有分类
