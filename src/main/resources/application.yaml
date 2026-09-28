@@ -27,7 +27,10 @@ spring:
       port: ${REDIS_PORT:6379}
       database: 3
       password: ${REDIS_PASSWORD:}
-      timeout: 3000ms
+      # 命令超时：熔断开路后只有"半开试探"那一次会用到它，压到 1s 让试探也别拖久
+      timeout: 1000ms
+      # 连接超时：黑洞型故障（IP 不通/防火墙丢包）真正决定快慢的是这个，Lettuce 默认值偏大
+      connect-timeout: 1000ms
   # RabbitMQ：订单超时未确认自动取消
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
@@ -82,7 +85,37 @@ knife4j:
     language: zh_cn
 
 app:
+  trade:
+    lock-probe-interval-ms: 5000   #后台探测 = 熔断的半开试探者 = Redisson 客户端重建者
+  collect-calibration:
+    #collect_count 冗余列对账：每天 03:30 用 collect 表回填，单轮限量，避免长事务锁太多行
+    cron: "0 30 3 * * ?"
+    batch-size: 500
+  view-count:
+    #浏览量增量从 Redis 搬进 goods.view_count 的间隔（5 分钟）
+    #这个值同时决定列表页浏览量的最大滞后量：调太长列表数字明显偏低，调太短就是拿 DB 写换显示精度
+    flush-interval-ms: 300000
+    #单轮最多处理多少个商品：极端流量下不把几万条 UPDATE 压成一次长循环，剩余增量下一轮继续
+    max-per-round: 2000
   order-timeout:
     minutes: 30                    #下单后多久未确认自动取消（同时用于队列 TTL）
     scan-interval-ms: 300000       #兜底扫描间隔
     mq-enabled: true               #false = 不发延迟消息，完全靠兜底扫描
+  auth:
+    # Redis 故障、黑名单读不出来时的降级方向：true=放行保可用（默认），false=拒绝保安全
+    blacklist-fail-open: true
+    # 每日登录+登出总量上限（防脚本滥用）
+    login-logout-max-per-day: 100
+    # 连续登录失败达到几次即锁定账号（防撞库，判定在密码校验之前）
+    login-fail-max: 5
+    # 账号锁定时长（分钟）= 失败计数的 Redis TTL，到期自动解锁，无需定时任务
+    login-lock-minutes: 15
+  redis:
+    # false=Redis 不可用时照常启动并降级运行（本地/演示友好）；true=启动探测失败即拒绝启动（生产建议）
+    required: false
+  content:
+    #UGC 审核总开关：批量灌数据/演示时可临时关掉，不必为造数据先想一套“不含敏感词”的说法
+    audit-enabled: true
+    #敏感词表，逗号分隔，例："代刷,幽灵商品,加微信付款"；
+    #留空 = 只依长度拦不依词表拦（不把一套假词库当代码的一部分，词表要随治理口径变）
+    sensitive-words: ""

@@ -2,6 +2,7 @@ package com.campus.trade.service.imp;
 
 import com.campus.trade.bean.DTO.request.order.OrderCreateDTO;
 import com.campus.trade.bean.entry.Order;
+import com.campus.trade.bean.vo.OrderVo;
 import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.utils.RedisContent;
@@ -38,13 +39,14 @@ public class OrderTradeFacade {
     @Resource
     private OrderTimeoutProducer orderTimeoutProducer;
 
-    public Long createOrder(OrderCreateDTO vo, Long buyerId) {
-        Long orderId = tradeLockTemplate.executeWithGoodsLock(vo.getGoodsId(),
+    public OrderVo createOrder(OrderCreateDTO vo, Long buyerId) {
+        OrderVo orderVo = tradeLockTemplate.executeWithGoodsLock(vo.getGoodsId(),
                 () -> orderService.createOrder(vo, buyerId));
         //走到这里内层事务已提交（且缓存也已在 afterCommit 里删过一轮），才允许发消息。
         //放在锁之外：临界区越短越好，发消息是网络 IO，不该占着锁。
-        orderTimeoutProducer.sendOrderTimeoutCheck(orderId);
-        return orderId;
+        //id 从返回的订单视图里取 —— 原来靠返回 Long，现在多带了 orderNo，时序一点没变
+        orderTimeoutProducer.sendOrderTimeoutCheck(orderVo.getId());
+        return orderVo;
     }
 
     public void cancelOrder(Long orderId, Long userId) {

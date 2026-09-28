@@ -2,6 +2,7 @@ package com.campus.trade.service.imp;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.campus.trade.bean.entry.Role;
 import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.entry.User;
@@ -19,6 +20,8 @@ import com.campus.trade.mapper.UserMapper;
 import com.campus.trade.service.UserService;
 import jakarta.annotation.Resource;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,7 +45,21 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    private final int MAX_PER_DAY=100;
+    //每日登录 + 登出总量上限：防脚本滥用（与下面的「连续失败锁定」是两个维度，不要混为一谈）
+    //上限做成配置，避免再出现「注释写 5 次、代码写 100 次」这种漂移
+    @Value("${app.auth.login-logout-max-per-day:100}")
+    private int maxLoginLogoutPerDay;
+
+    //连续登录失败达到该次数即锁定账号
+    @Value("${app.auth.login-fail-max:5}")
+    private int loginFailMax;
+
+    //锁定时长（分钟），同时是失败计数的 Redis TTL：到期自动解锁，不需要定时任务
+    @Value("${app.auth.login-lock-minutes:15}")
+    private int loginLockMinutes;
+
+    @Resource
+    private UserMapper userMapper;
 
     // 用户注册
     @Override
@@ -63,7 +80,13 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
         user.setRole("user");
 
         //保存用户
-        save(user);
+        try {
+            save(user);
+        } catch (DuplicateKeyException e) {
+            //"先查后插"两步之间可能被并发抢先，uk_username 才是唯一可靠的裁判：
+            //预检给人话，唯一键给正确性（与 addCollect 同一写法）
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,"用户名已存在,请更换");
+        }
     }
 
     // 用户登录
@@ -76,15 +99,30 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
         if(exsituser == null){
             throw new BusinessException(ErrorCode.PARAM_ERROR,"用户名或密码错误");
         }
+        //锁定判定必须在密码校验【之前】：
+        //1) 旧写法把计数写在 matches 之后，密码错根本不计数，所谓上限对撞库完全无效
+        //2) 锁定期内直接拒绝，省下每次约 100ms 的 BCrypt 比对，这本身就是抗爆破预算
+        if (userActionLimitUtils.isLoginLocked(exsituser.getId(), loginFailMax)) {
+            throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS,
+                    "密码错误次数过多，账号已锁定，请 " + loginLockMinutes + " 分钟后再试");
+        }
         if(!passwordEncoder.matches(userLoginDTO.getPassword(), exsituser.getPassword())){
+            long fails = userActionLimitUtils.recordLoginFailure(exsituser.getId(), loginLockMinutes);
+            //达到阈值才报锁定；未达阈值仍然只回同一句话，不告诉尝试者还剩几次额度（避免反向探测）
+            if (fails >= loginFailMax) {
+                throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS,
+                        "密码错误次数过多，账号已锁定，请 " + loginLockMinutes + " 分钟后再试");
+            }
             throw new BusinessException(ErrorCode.PARAM_ERROR,"用户名或密码错误");
         }
-        //判断是否被禁用
+        //密码对了才清除失败计数（错密码不能顺便把计数洗掉）
+        userActionLimitUtils.clearLoginFailure(exsituser.getId());
+        //判断是否被禁用（身份核验之后才能告知，否则未验密码就能探测“谁被禁了”）
         if(exsituser.getStatus() == 0){
             throw new BusinessException(ErrorCode.FORBIDDEN,"用户被禁用");
         }
-        //每日登录/登出次数限制（5次/天）
-        if(!userActionLimitUtils.tryAcquire(exsituser.getId(), MAX_PER_DAY)){
+        //每日登录/登出总量限制
+        if(!userActionLimitUtils.tryAcquire(exsituser.getId(), maxLoginLogoutPerDay)){
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS,"今日登录/登出次数已达上限,请明天再试");
         }
         //Token 中写入用户级版本号，改密后版本自增即可让该 Token 失效
@@ -96,7 +134,7 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
     @Override
     public void logout(String token) {
         //计入当日次数（登出本身始终放行，避免用户被锁死）
-        userActionLimitUtils.tryAcquire(jwtUtils.getUserId(token), MAX_PER_DAY);
+        userActionLimitUtils.tryAcquire(jwtUtils.getUserId(token), maxLoginLogoutPerDay);
         tokenBlacklistUtils.add(token);
     }
 
@@ -142,13 +180,38 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
         if (!passwordEncoder.matches(vo.getOldPassword(), user.getPassword())) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "旧密码不正确");
         }
-        user.setPassword(passwordEncoder.encode(vo.getNewPassword()));
-        //改密后 Token 版本 +1：此前签发的所有旧 Token 版本不再匹配，立即失效
-        int newVersion = (user.getTokenVersion() == null ? 1 : user.getTokenVersion()) + 1;
-        user.setTokenVersion(newVersion);
-        updateById(user);
-        //同步刷新缓存，避免拦截器仍读到旧版本号
-        tokenVersionUtils.refresh(userId, newVersion);
+        //新密码 + token_version 自增，一条 SQL 原子完成（不在 Java 里读出来 +1 再写回）
+        userMapper.updatePasswordAndBumpVersion(userId, passwordEncoder.encode(vo.getNewPassword()));
+        //改密后 Token 版本 +1：此前签发的所有旧 Token 版本不再匹配，立即失效。
+        //失效动作挂在提交之后 —— 提交前刷缓存会被并发读用旧值覆盖回去
+        tokenVersionUtils.evictAfterCommit(userId);
+    }
+
+    //启用/禁用用户：禁用 = 改状态 + 全端踢下线，两件事必须绑死在 Service 里，
+    //不能指望每个 Controller 都记得补一刀
+    @Override
+    public void changeUserStatus(Long userId, Integer status, Long operatorId) {
+        if (status == null || (status != 0 && status != 1)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "状态值只能为0或1");
+        }
+        if (userId == null || userId.equals(operatorId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能修改自己的状态");
+        }
+        User user = getById(userId);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
+        }
+        //把唯一的管理员禁掉 = 把自己锁在系统外，且 RBAC 演示直接崩
+        if (status == 0 && Role.ADMIN.getCode().equals(user.getRole())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "不能禁用管理员账号");
+        }
+        if (status == 0) {
+            userMapper.disableAndKickOut(userId);
+        } else {
+            userMapper.enableUser(userId);
+        }
+        //关键一步：版本缓存 TTL 5 分钟，不主动失效则拦截器仍会拿旧版本号比对通过 → 禁用形同没生效
+        tokenVersionUtils.evictAfterCommit(userId);
     }
 
     //查看他人主页

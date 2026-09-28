@@ -12,6 +12,9 @@ public class UserLoginDTO {
     @Schema(description = "用户名")
     private String username;
 
+    //这里刻意不加长度/字符集校验：登录只需要“能比对”，不需要“够强”。
+    //套上注册页那套规则会让历史弱密码账号直接登不上，
+    //还多送出一条“密码格式不正确”给试探者当探测信号 —— 与 login() 里“统一错误文案防枚举”是同一条思路
     @NotBlank(message = "密码不能为空")
     @Schema(description = "密码")
     private String password;

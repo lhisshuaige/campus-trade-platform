@@ -22,6 +22,8 @@ public interface UserService extends IService<User> {
     void updateUserInfo(Long userId, UserUpdateDTO userUpdateDTO);
     //修改密码
     void changePassword(Long userId, UserChangePasswordDTO vo);
+    //启用/禁用用户（管理员）：禁用同时使该用户全部存量 Token 立即失效
+    void changeUserStatus(Long userId, Integer status, Long operatorId);
     //查看他人主页
     UserProfileVo getUserProfile(Long userId);
 }

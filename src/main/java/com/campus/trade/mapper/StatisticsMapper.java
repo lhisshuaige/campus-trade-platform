@@ -34,14 +34,6 @@ public interface StatisticsMapper {
     @Select("SELECT status AS status, COUNT(*) AS count FROM goods GROUP BY status")
     List<Map<String, Object>> getGoodsStatusCount();
 
-    // 热门商品排行（按收藏数降序）
-    @Select("SELECT g.id AS id, g.title AS title, g.price AS price, g.image AS image, " +
-            "COUNT(c.id) AS collectCount " +
-            "FROM goods g LEFT JOIN collect c ON g.id = c.goods_id " +
-            "GROUP BY g.id, g.title, g.price, g.image " +
-            "ORDER BY collectCount DESC, g.create_time DESC LIMIT #{limit}")
-    List<Map<String, Object>> getHotGoods(@Param("limit") int limit);
-
     // 商品价格区间分布
     @Select("SELECT CASE " +
             "WHEN price < 50 THEN '50元以下' " +

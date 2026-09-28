@@ -24,7 +24,7 @@ import java.util.function.Supplier;
 public class CacheUtils {
 
     @Resource
-    private StringRedisTemplate stringRedisTemplate;
+    private SafeRedis safeRedis;
     @Resource
     private RedisLockUtils redisLockUtils;
 
@@ -130,7 +130,7 @@ public class CacheUtils {
      * 删除缓存，供业务增删改后调用，统一 key 管理入口
      */
     public void evict(String key) {
-        redisDelete(key);
+        safeRedis.deleteSwallow(key);
     }
 
     /**
@@ -179,12 +179,12 @@ public class CacheUtils {
         wrapper.set("expireTime", System.currentTimeMillis() + ttl.toMillis());
         // data 直接内嵌为 JSON 节点，null 表示缓存的是空值（防穿透）
         wrapper.set("data", value == null ? null : JSONUtil.parse(JSONUtil.toJsonStr(value)));
-        redisSet(key, wrapper.toString(), physicalTtlWithJitter());
+        safeRedis.setSwallow(key, wrapper.toString(), physicalTtlWithJitter());
     }
 
     // 读缓存：解析包装结构并计算是否逻辑过期；脏数据解析失败则删除后当作未命中（自愈）
     private CacheEntry readCache(String key) {
-        String cached = redisGet(key);
+        String cached = safeRedis.getOrNull(key);
         if (cached == null || cached.isBlank()) {
             return null;
         }
@@ -198,7 +198,7 @@ public class CacheUtils {
             return entry;
         } catch (Exception e) {
             log.warn("缓存解析失败，删除脏 key={}", key, e);
-            redisDelete(key);
+            safeRedis.deleteSwallow(key);
             return null;
         }
     }
@@ -211,32 +211,6 @@ public class CacheUtils {
     // 物理 TTL 加抖动，避免大量 key 同一时刻物理失效
     private Duration physicalTtlWithJitter() {
         return PHYSICAL_TTL.plusSeconds(ThreadLocalRandom.current().nextLong(PHYSICAL_JITTER_SECONDS));
-    }
-
-    // ---------- Redis 安全包装：故障时降级，不阻断回源查库 ----------
-    private String redisGet(String key) {
-        try {
-            return stringRedisTemplate.opsForValue().get(key);
-        } catch (Exception e) {
-            log.warn("Redis 读取失败，降级 key={}", key, e);
-            return null;
-        }
-    }
-
-    private void redisSet(String key, String value, Duration ttl) {
-        try {
-            stringRedisTemplate.opsForValue().set(key, value, ttl);
-        } catch (Exception e) {
-            log.warn("Redis 写入失败，忽略 key={}", key, e);
-        }
-    }
-
-    private void redisDelete(String key) {
-        try {
-            stringRedisTemplate.delete(key);
-        } catch (Exception e) {
-            log.warn("Redis 删除失败，忽略 key={}", key, e);
-        }
     }
 
     // 缓存包装条目：逻辑过期时间 + 是否已过期 + 业务数据 JSON

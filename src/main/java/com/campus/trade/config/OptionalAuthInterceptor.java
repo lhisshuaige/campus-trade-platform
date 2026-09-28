@@ -46,14 +46,17 @@ public class OptionalAuthInterceptor implements HandlerInterceptor {
             Claims claims = jwtUtils.parseToken(token);
             Long userId = claims.get("userId", Long.class);
             String role = claims.get("role", String.class);
+            String username = claims.get("username", String.class);
             Integer tokenVersion = claims.get("tokenVersion", Integer.class);
-            // Token 版本不匹配（如已改密）同样视为匿名
-            if (tokenVersion == null
-                    || tokenVersion.intValue() != tokenVersionUtils.getCurrentVersion(userId)) {
+            TokenVersionUtils.AuthState state = tokenVersionUtils.getAuthState(userId);
+            // Token 版本不匹配（改密/禁用）或账号已禁用，一律静默按匿名处理
+            if (tokenVersion == null || tokenVersion.intValue() != state.version() || state.status() != 1) {
                 return true;
             }
             request.setAttribute("loginUserId", userId);
             request.setAttribute("loginUserRole", role);
+            //与 JwtInterceptor 保持同一套登录态，不然同一个人在不同接口留下的日志口径会不一致
+            request.setAttribute("loginUsername", username);
         } catch (Exception e) {
             // 公开接口：任何解析/校验异常都按匿名处理，绝不影响匿名访问
             return true;

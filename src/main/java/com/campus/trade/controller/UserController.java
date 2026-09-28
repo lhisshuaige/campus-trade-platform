@@ -5,6 +5,7 @@ import com.campus.trade.bean.DTO.request.user.UserLoginDTO;
 import com.campus.trade.bean.DTO.request.user.UserRegisterDTO;
 import com.campus.trade.bean.DTO.request.user.UserUpdateDTO;
 import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.vo.UserProfileVo;
 import com.campus.trade.bean.vo.UserVo;
 import com.campus.trade.service.UserService;
@@ -26,6 +27,7 @@ public class UserController {
     // 用户注册
     @PostMapping("/register")
     @Operation(summary = "用户注册",description = "根据用户名和密码注册新用户")
+    @Log("用户注册")
     public MyResult<Void> register(@Valid @RequestBody UserRegisterDTO userRegisterDTO){
         userService.register(userRegisterDTO);
         return MyResult.success();
@@ -34,6 +36,7 @@ public class UserController {
     // 用户登录
     @PostMapping("/login")
     @Operation(summary = "用户登录",description = "根据用户名和密码登录，返回JWT令牌")
+    @Log("用户登录")
     public MyResult<String> login(@Valid @RequestBody UserLoginDTO userLoginDTO){
         String token = userService.login(userLoginDTO);
         return MyResult.success(token);
@@ -42,6 +45,7 @@ public class UserController {
     // 退出登录
     @PostMapping("/logout")
     @Operation(summary = "退出登录",description = "将当前token加入黑名单使其失效")
+    @Log("退出登录")
     public MyResult<Void> logout(HttpServletRequest request) {
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
@@ -62,6 +66,7 @@ public class UserController {
     // 修改个人资料
     @PostMapping("/update")
     @Operation(summary = "修改个人资料")
+    @Log("修改个人资料")
     public MyResult<Void> updateUserInfo(@Valid @RequestBody UserUpdateDTO userUpdateDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         userService.updateUserInfo(loginUserId, userUpdateDTO);
@@ -71,6 +76,8 @@ public class UserController {
     // 修改密码
     @PostMapping("/changePassword")
     @Operation(summary = "修改密码")
+    // 改密是账号安全的头号事件：登录/登出/改密都要留痕，只校旧密码而不记录，事后无从回答"什么时候被改走的"
+    @Log("修改密码")
     public MyResult<Void> changePassword(@Valid @RequestBody UserChangePasswordDTO vo, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         userService.changePassword(loginUserId, vo);

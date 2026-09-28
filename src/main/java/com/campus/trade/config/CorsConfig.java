@@ -56,8 +56,11 @@ public class CorsConfig implements WebMvcConfigurer {
                         "/favicon.ico",
                         "/upload/**",
                         // 商品浏览相关：无需登录即可浏览、搜索商品
+                        // 排行榜也不挂 optionalAuth：返回内容与人无关，
+                        // 多一次 token 解析 + Redis 读只是给最热公开接口白白加成本
                         "/goods/getAll",
                         "/goods/getDetail",
+                        "/goods/getCollectRank",
                         "/category/getAll",
                         "/comment/list",
                         "/user/profile/**"

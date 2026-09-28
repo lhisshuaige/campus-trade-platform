@@ -1,6 +1,7 @@
 package com.campus.trade.controller;
 
 import com.campus.trade.bean.entry.Role;
+import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.utils.RequireRole;
 import com.campus.trade.bean.DTO.request.category.CategoryAddDTO;
 import com.campus.trade.bean.DTO.request.category.CategoryUpdateDTO;
@@ -24,6 +25,8 @@ public class CategoryController {
 
     @PostMapping("/add")
     @Operation(summary = "添加分类")
+    //分类是全站共用的基础数据：改坏了会同时影响所有商品列表，这三个写入口必须留痕
+    @Log("添加分类")
     @RequireRole(Role.ADMIN)
     public MyResult<Void> add(@Valid @RequestBody CategoryAddDTO categoryAddDTO) {
         categoryService.add(categoryAddDTO);
@@ -32,14 +35,16 @@ public class CategoryController {
 
     @PostMapping("/update")
     @Operation(summary = "修改分类")
+    @Log("修改分类")
     @RequireRole(Role.ADMIN)
     public MyResult<Void> update(@Valid @RequestBody CategoryUpdateDTO categoryUpdateDTO) {
         categoryService.update(categoryUpdateDTO);
         return MyResult.success();
     }
 
-   @DeleteMapping("/delete")
+    @DeleteMapping("/delete")
     @Operation(summary = "删除分类")
+    @Log("删除分类")
     @RequireRole(Role.ADMIN)
     public MyResult<Void> delete(@RequestParam("id") Long id) {
         categoryService.delete(id);

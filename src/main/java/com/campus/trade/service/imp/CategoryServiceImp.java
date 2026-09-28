@@ -17,6 +17,7 @@ import com.campus.trade.mapper.GoodsMapper;
 import com.campus.trade.service.CategoryService;
 import jakarta.annotation.Resource;
 import org.springframework.beans.BeanUtils;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,7 +44,18 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
     public void add(CategoryAddDTO categoryAddDTO) {
         Category category = new Category();
         BeanUtils.copyProperties(categoryAddDTO, category);
-        save(category);
+        //先查重名：uk_category_name 会直接拒插，不预检就是一句“服务器内部错误”，管理员看不出哪错了
+        LambdaQueryWrapper<Category> nameWrapper = new LambdaQueryWrapper<>();
+        nameWrapper.eq(Category::getName, category.getName());
+        if (count(nameWrapper) > 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "分类名称已存在");
+        }
+        try {
+            save(category);
+        } catch (DuplicateKeyException e) {
+            //"先查后插"不保证并发唯一，唯一键才是最后防线（与 addCollect / register 同一写法）
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "分类名称已存在");
+        }
         //删除缓存 因为这里新添加了分类（提交后删，避免事务内删被并发读回填旧值）
         cacheUtils.evictAfterCommit(RedisContent.Category_List_KEY);
     }
@@ -54,7 +66,12 @@ public class CategoryServiceImp extends ServiceImpl<CategoryMapper, Category> im
     public void update(CategoryUpdateDTO categoryUpdateDTO) {
         Category category = new Category();
         BeanUtils.copyProperties(categoryUpdateDTO, category);
-        updateById(category);
+        try {
+            updateById(category);
+        } catch (DuplicateKeyException e) {
+            //改名撞 uk_category_name：同样是 500 路径，一并翻译成人话
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "分类名称已存在");
+        }
         //删除缓存 因为这里修改了分类
         cacheUtils.evictAfterCommit(RedisContent.Category_List_KEY);
     }
