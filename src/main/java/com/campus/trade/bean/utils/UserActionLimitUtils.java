@@ -15,16 +15,25 @@ public class UserActionLimitUtils {
     @Resource
     private SafeRedis safeRedis;
 
-    // 计数 +1 并判断是否仍在当日上限内（INCR 原子操作，天然并发安全）
+    // 登录/登出专用的当日限额（保留原签名做委派，调用方不必跟着改）
     public boolean tryAcquire(Long userId, int maxPerDay) {
+        return tryAcquire(RedisContent.User_Loginout_Count_KEY, userId, maxPerDay);
+    }
+
+    /**
+     * 按「用户 + 自然日」计数的通用限额。key 前缀由调用方给出，不同动作用不同桶
+     *（登录/登出与上传各算各的额度，否则传商品会把自己挤下线）。
+     * INCR 原子操作，天然并发安全。
+     */
+    public boolean tryAcquire(String keyPrefix, Long userId, int maxPerDay) {
         // key 带日期，天然按天重置；再加 TTL 到当天 24 点，让旧 key 自动清理
-        String key = RedisContent.User_Loginout_Count_KEY + userId + ":" + LocalDate.now();
+        String key = keyPrefix + userId + ":" + LocalDate.now();
         Long count = safeRedis.incrOrNull(key);
         if (count == null) {
             // Redis 故障：限流是【保护措施】不是【业务功能】，fail-open 放行。
             // 若在此拒绝，Redis 一挂就没人能登录 —— 不能因为保险丝坏了就把整栋楼断电。
             // 代价：故障窗口内失去防爆破计数；兜底靠 BCrypt 成本因子、token_version 与后续网关层限流。
-            log.warn("登录/登出限流不可用，本次放行 userId={}", userId);
+            log.warn("当日限额计数不可用，本次放行 key={}", key);
             return true;
         }
         if (count == 1L) {

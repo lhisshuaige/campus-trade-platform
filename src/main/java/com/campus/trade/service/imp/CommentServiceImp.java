@@ -113,6 +113,8 @@ public class CommentServiceImp extends ServiceImpl<CommentMapper, Comment> imple
         if (!isAdmin && !comment.getUserId().equals(loginUserId)){
             throw new BusinessException(ErrorCode.FORBIDDEN,"不能删除别人的评论");
         }
+        //逻辑删除（P3-5）：这里发出去的是 UPDATE comment SET deleted=1，行仍在库里。
+        //“删掉”与“销毁”不再是同一件事：内容治理要能回答“这条违规内容当时写了什么”
         removeById(commentId);
         //删完必须让列表缓存失效，否则被删的评论还能展示 5 分钟
         cacheUtils.evictAfterCommit(RedisContent.commentListKey(comment.getGoodsId()));
@@ -178,7 +180,9 @@ public class CommentServiceImp extends ServiceImpl<CommentMapper, Comment> imple
         if (rows.isEmpty()) {
             return voPage;
         }
-        //批量补商品标题与昵称，避免逐条查（和订单列表同一套做法）
+        //批量补商品标题与昵称，避免逐条查（和订单列表同一套做法）。
+        //selectBatchIds 会自带 deleted=0（@TableLogic），所以“查不到”从 P3-5 起有了一个明确含义：
+        //商品已被逻辑删除，而这条评论还在（这正是逻辑删除要留下的那份痕迹）
         Map<Long, String> titleMap = goodsMapper.selectBatchIds(
                         rows.stream().map(Comment::getGoodsId).distinct().toList()).stream()
                 .collect(Collectors.toMap(Goods::getId, g -> g.getTitle() != null ? g.getTitle() : ""));
@@ -188,7 +192,8 @@ public class CommentServiceImp extends ServiceImpl<CommentMapper, Comment> imple
         for (Comment comment : rows) {
             CommentAdminVo vo = new CommentAdminVo();
             BeanUtils.copyProperties(comment, vo);
-            vo.setGoodsTitle(titleMap.getOrDefault(comment.getGoodsId(), ""));
+            //留一行空标题比给一句说明更难查：后台看到“这条评论的商品叫什么”应该是能直接读出答案的
+            vo.setGoodsTitle(titleMap.getOrDefault(comment.getGoodsId(), "（商品已删除）"));
             vo.setNickname(nickNameMap.getOrDefault(comment.getUserId(), ""));
             voPage.getRecords().add(vo);
         }

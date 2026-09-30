@@ -27,7 +27,7 @@ public class RedisWorker {
         long timestamp = System.currentTimeMillis() / 1000;
         // 2. 生成当天内的自增序列号(key 带日期，每天从 0 重新开始)
         String date = LocalDateTime.now().format(DATE_FORMATTER);
-        String key = "icr:" + keyPrefix + ":" + date;
+        String key = RedisContent.ID_Seq_KEY + keyPrefix + ":" + date;
         // 【不降级】：订单号必须唯一且趋势递增。退化成随机数/本地雪花等于要重新论证唯一性
         // （workerId 分配、时钟回拨），为一个单体课程项目不值当。Redis 挂了下单明确失败即可。
         Long count = safeRedis.incrRequired(key);

@@ -74,11 +74,23 @@ CREATE TABLE IF NOT EXISTS `goods` (
     `status`      INT           NOT NULL DEFAULT 1 COMMENT '状态: 0-下架, 1-上架, 2-已售出',
     `collect_count` INT         NOT NULL DEFAULT 0 COMMENT '收藏数(冗余计数)',
     `view_count`  INT           NOT NULL DEFAULT 0 COMMENT '浏览量(DB存量,实时值=本列+Redis未落库增量)',
+    -- 逻辑删除位：@TableLogic 的值列（0 正常 / 1 已删）。MP 自动给生成的 SQL 追加 deleted=0，
+    -- 但【手写 @Select 不会】，所以 CollectMapper/StatisticsMapper/GoodsMapper 里凡是碰 goods 的裸 SQL 都得自己带上
+    `deleted`     TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除, 1-已删除',
+    -- 乐观锁版本号：只服务"读整行→改几个字段→写回整行"那一条路径(updateGoods)，
+    -- 状态迁移仍走单列 CAS，不给每张表都补一列（见 Goods.version 的注释）
+    `version`     INT           NOT NULL DEFAULT 0 COMMENT '乐观锁版本号(整行覆盖式更新时比对)',
     `create_time` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发布时间',
     PRIMARY KEY (`id`),
     KEY `idx_goods_user` (`user_id`),
     KEY `idx_goods_category` (`category_id`),
-    KEY `idx_goods_status` (`status`),
+    -- 主列表/我的商品/管理端列表共用同一条 SQL 形状：WHERE status=? ORDER BY create_time DESC。
+    -- 原来的单列 idx_goods_status 只能过滤不能排序，仍要 filesort；联合索引第二列把排序一起吃掉，
+    -- 而"只按 status 筛"走它的最左前缀等价于原索引，所以单列那条直接删掉，不留在表里白白多一次写放大
+    KEY `idx_goods_status_create` (`status`, `create_time`),
+    -- 中文标题搜索：LIKE '%kw%' 前置通配任何 B+Tree 索引都用不上（只能全表扫），
+    -- ngram 全文索引把"是否包含"变成"索引查找"；取值 2 字成词，与 app.search.fulltext-enabled 配套
+    FULLTEXT KEY `ft_goods_title` (`title`) WITH PARSER ngram,
     CONSTRAINT `fk_goods_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_goods_category` FOREIGN KEY (`category_id`) REFERENCES `category` (`id`) ON DELETE RESTRICT,
     CONSTRAINT `chk_goods_price` CHECK (`price` >= 0),
@@ -97,12 +109,15 @@ CREATE TABLE IF NOT EXISTS `goods` (
 -- 4. 评论表 comment
 -- 实体完整性：id 主键自增
 -- 参照完整性：goods_id 引用 goods.id、user_id 引用 user.id
+-- 逻辑删除：评论是内容而不是关系行，“删掉”与“销毁”不该是同一件事 —— 内容治理要能回答
+-- “这条违规内容当时写了什么”，所以这里用 deleted 标记而不是真删（见 P3-5）
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `comment` (
     `id`          BIGINT   NOT NULL AUTO_INCREMENT COMMENT '评论ID',
     `goods_id`    BIGINT   NOT NULL COMMENT '商品ID',
     `user_id`     BIGINT   NOT NULL COMMENT '评论者ID',
     `content`     TEXT     NOT NULL COMMENT '评论内容',
+    `deleted`     TINYINT  NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除, 1-已删除',
     `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '评论时间',
     PRIMARY KEY (`id`),
     KEY `idx_comment_goods` (`goods_id`),
@@ -280,3 +295,27 @@ INSERT INTO `category` (`name`, `sort`) VALUES
 --     ADD CONSTRAINT `chk_user_username` CHECK (CHAR_LENGTH(`username`) BETWEEN 3 AND 20),
 --     ADD CONSTRAINT `chk_user_phone` CHECK (`phone` IS NULL OR `phone` REGEXP '^1[3-9][0-9]{9}$'),
 --     ADD CONSTRAINT `chk_user_role` CHECK (`role` IN ('user', 'admin'));
+
+-- -----------------------------------------------------
+-- 【存量库增量升级 · P3-1/2/5/6】goods 索引与逻辑删除列、comment 逻辑删除列
+-- 跑之前先做两条自检（都是只读）：
+--   1) SHOW VARIABLES LIKE 'ngram_token_size';   -- 必须是 2。它是**服务端启动参数**，不是会话参数，
+--      改成 3 会让双字关键词全搜不到（索引里根本没有二字词），而这不会报错，只会“搜索永远空”
+--   2) SHOW INDEX FROM goods WHERE Key_name IN ('idx_goods_status','idx_goods_status_create','ft_goods_title');
+--      -- 已经跑过一次的不要重复跑（重复 ADD INDEX 不报错但会多一条同构索引，只多付写放大）
+-- 顺序不能换：**先建新联合索引再删单列索引**，反过来会留出一个“status 查询无索引可用”的窗口
+-- ALTER TABLE `goods`
+--     ADD COLUMN `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除, 1-已删除' AFTER `view_count`,
+--     ADD COLUMN `version` INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本号' AFTER `deleted`,
+--     ADD INDEX `idx_goods_status_create` (`status`, `create_time`);
+-- ALTER TABLE `goods` DROP INDEX `idx_goods_status`;
+-- -- FULLTEXT 单独一条：它要建倒排索引并填辅助表，和上面的加列/加普通索引不是一类操作
+-- ALTER TABLE `goods` ADD FULLTEXT KEY `ft_goods_title` (`title`) WITH PARSER ngram;
+-- ALTER TABLE `comment` ADD COLUMN `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除' AFTER `content`;
+-- 两个 ADD COLUMN 在 MySQL 8 是 INSTANT DDL（只改元数据，不重建表、不锁行），存量行自动拿到默认值 0，
+-- 所以**不需要回填**：“以前没这列”与“这列是 0”在业务上是同一件事（未删除）。
+-- 唯一不可逆的是旧数据：此前被物理删掉的评论/商品不会回来，痕迹从这一次以后才开始留下。
+-- ⚠ ft_goods_title 没建上而 `app.search.fulltext-enabled` 又开着，搜索会直接 500
+--   （MySQL 报 1191 Can't FIND matched index）。这是故意选的方向：宁可当天发现，
+--   也不让“上了全文索引”这件事变成一个永远没人发现的静默回退。跑不了 DDL 的环境把那一行翻成 false 即可回到 LIKE 老路径
+-- -----------------------------------------------------

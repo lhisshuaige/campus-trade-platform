@@ -3,6 +3,7 @@ package com.campus.trade.controller;
 import com.campus.trade.bean.DTO.request.report.ReportAddDTO;
 import com.campus.trade.bean.DTO.result.MyResult;
 import com.campus.trade.bean.utils.Log;
+import com.campus.trade.bean.utils.RateLimit;
 import com.campus.trade.service.ReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +32,9 @@ public class ReportController {
     @Operation(summary = "提交举报", description = "同一人对同一内容重复提交且尚未处理时会被拒绝；处理结果通过站内信通知")
     //举报要留痕：除了内容本身，"谁在反复举报同一人"也是一种需要被看见的行为
     @Log("提交举报")
+    //服务端的 uk（同一人同一内容重复举报且未处理完则拒）只能挡住完全相同的重复，
+    //换一个理由、换一个商品就是新的一行 —— 而每一行都是管理员的一条待办，所以这层要的是频率
+    @RateLimit(maxCount = 5, message = "提交举报过于频繁，请稍后再试")
     public MyResult<Void> add(@Valid @RequestBody ReportAddDTO reportAddDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         reportService.addReport(reportAddDTO, loginUserId);

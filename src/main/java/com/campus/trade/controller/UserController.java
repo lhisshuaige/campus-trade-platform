@@ -6,6 +6,7 @@ import com.campus.trade.bean.DTO.request.user.UserRegisterDTO;
 import com.campus.trade.bean.DTO.request.user.UserUpdateDTO;
 import com.campus.trade.bean.DTO.result.MyResult;
 import com.campus.trade.bean.utils.Log;
+import com.campus.trade.bean.utils.RateLimit;
 import com.campus.trade.bean.vo.UserProfileVo;
 import com.campus.trade.bean.vo.UserVo;
 import com.campus.trade.service.UserService;
@@ -28,6 +29,8 @@ public class UserController {
     @PostMapping("/register")
     @Operation(summary = "用户注册",description = "根据用户名和密码注册新用户")
     @Log("用户注册")
+    //按 IP 而不按用户：注册时必定没有登录态，而脚本批量注册的特征就是「同一个出口地址连发」
+    @RateLimit(maxCount = 5, dimension = RateLimit.Dimension.IP, message = "注册过于频繁，请稍后再试")
     public MyResult<Void> register(@Valid @RequestBody UserRegisterDTO userRegisterDTO){
         userService.register(userRegisterDTO);
         return MyResult.success();
@@ -37,6 +40,10 @@ public class UserController {
     @PostMapping("/login")
     @Operation(summary = "用户登录",description = "根据用户名和密码登录，返回JWT令牌")
     @Log("用户登录")
+    //这一层与 P0-9 的「连续失败锁定」不重叠，是两个维度：那个按【用户】计且只在密码错时计数，
+    //拿一批正确用户名轮询试探（每账号只错 4 次）它完全不触发；这个按【来源 IP】计，不看结果
+    //30 次/分钟是照「一个机房共用一个出口 IP」的场景定的，再紧就会误伤集体上下课时间的正常登录
+    @RateLimit(maxCount = 30, dimension = RateLimit.Dimension.IP)
     public MyResult<String> login(@Valid @RequestBody UserLoginDTO userLoginDTO){
         String token = userService.login(userLoginDTO);
         return MyResult.success(token);
@@ -52,6 +59,18 @@ public class UserController {
             token = token.substring(7);
         }
         userService.logout(token);
+        return MyResult.success();
+    }
+
+    // 全端登出
+    @PostMapping("/logoutAll")
+    @Operation(summary = "全端登出", description = "使该账号已签发的全部Token立即失效（含其他设备）；调用后当前设备也需要重新登录")
+    // 与 logout/changePassword 同一类：账号安全事件必须留痕，事后才能回答“什么时候从哪里把全部会话收走的”
+    @Log("全端登出")
+    public MyResult<Void> logoutAll(HttpServletRequest request) {
+        // 只取登录态，不接 userId 参数：否则“全端登出别人”就是一个改改数字就能做的事
+        Long loginUserId = (Long) request.getAttribute("loginUserId");
+        userService.logoutAll(loginUserId);
         return MyResult.success();
     }
 

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campus.trade.bean.DTO.request.order.OrderCreateDTO;
 import com.campus.trade.bean.DTO.result.MyResult;
 import com.campus.trade.bean.utils.Log;
+import com.campus.trade.bean.utils.RateLimit;
 import com.campus.trade.bean.vo.OrderVo;
 import com.campus.trade.service.OrderService;
 import com.campus.trade.service.imp.OrderTradeFacade;
@@ -29,6 +30,9 @@ public class OrderController {
     @PostMapping("/create")
     @Operation(summary = "创建订单（买家下单）", description = "返回完整订单视图，含订单号，前端可直接展示/跳详情")
     @Log("买家下单")
+    //下单是全站单位成本最高的一次写：抢商品锁 + 全局订单号 INCR + 库存/状态变更 + 发延迟消息，
+    //而且每一环都在占用别的用户的资源。故额度给得比其它写入口都紧
+    @RateLimit(maxCount = 5, message = "下单过于频繁，请稍后再试")
     public MyResult<OrderVo> create(@Valid @RequestBody OrderCreateDTO vo, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         return MyResult.success(orderTradeFacade.createOrder(vo, loginUserId));
@@ -44,6 +48,9 @@ public class OrderController {
     @PutMapping("/confirm")
     @Operation(summary = "卖家确认订单")
     @Log("卖家确认订单")
+    //确认/收货/取消三个动作共用一份额度（key 相同）：刷的是「同一个用户在高频拨订单状态机」，
+    //不必给三个端点各算一份预算；不共用的话，脚本把三个接口轮流打就能拿到三倍额度
+    @RateLimit(key = "order:action", maxCount = 20)
     public MyResult<Void> confirm(@RequestParam("id") Long orderId, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         orderTradeFacade.confirmOrder(orderId, loginUserId);
@@ -53,6 +60,7 @@ public class OrderController {
     @PutMapping("/complete")
     @Operation(summary = "确认完成交易（买家确认收货）")
     @Log("买家确认收货")
+    @RateLimit(key = "order:action", maxCount = 20)
     public MyResult<Void> complete(@RequestParam("id") Long orderId, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         orderTradeFacade.completeOrder(orderId, loginUserId);
@@ -63,6 +71,7 @@ public class OrderController {
     @Operation(summary = "取消订单")
     //下单/确认/收货/取消这四个动作会改商品状态与库存，是最需要"谁在什么时候点的"的地方
     @Log("取消订单")
+    @RateLimit(key = "order:action", maxCount = 20)
     public MyResult<Void> cancel(@RequestParam("id") Long orderId, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         orderTradeFacade.cancelOrder(orderId, loginUserId);

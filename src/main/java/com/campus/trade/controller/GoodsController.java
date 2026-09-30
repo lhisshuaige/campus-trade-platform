@@ -2,6 +2,7 @@ package com.campus.trade.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campus.trade.bean.utils.Log;
+import com.campus.trade.bean.utils.RateLimit;
 import com.campus.trade.bean.DTO.request.goods.GoodsAddDTO;
 import com.campus.trade.bean.DTO.request.goods.GoodsPageQueryDTO;
 import com.campus.trade.bean.DTO.request.goods.GoodsUpdateDTO;
@@ -29,6 +30,9 @@ public class GoodsController {
     @PostMapping("/add")
     @Operation(summary = "添加商品")
     @Log("添加商品")
+    //每次发布都要走一遍内容审核，并且要清掉详情缓存与收藏排行榜缓存（商品不足 50 件时新商品直接进榜）。
+    //5 条/分钟是一个人手动发布的速度上限（标题、描述、图片都要时间填）
+    @RateLimit(maxCount = 5, message = "发布商品过于频繁，请稍后再试")
     public MyResult<Void> add(@Valid @RequestBody GoodsAddDTO goodsAddDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         goodsService.addGoods(goodsAddDTO, loginUserId);

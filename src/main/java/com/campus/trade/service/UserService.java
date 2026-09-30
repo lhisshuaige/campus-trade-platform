@@ -14,8 +14,10 @@ public interface UserService extends IService<User> {
     void register(UserRegisterDTO userRegisterDTO);
     //登录
     String login(UserLoginDTO userLoginDTO);
-    //退出登录
+    //退出登录（仅当前 token）
     void logout(String token);
+    //全端登出：该账号所有已签发的 Token 立即失效（靠 token_version 自增，不是黑名单）
+    void logoutAll(Long userId);
     //获取当前登录用户信息
     UserVo getUserInfo(Long userId);
     //修改个人资料

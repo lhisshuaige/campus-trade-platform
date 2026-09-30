@@ -7,10 +7,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicLong;
@@ -126,6 +128,16 @@ public class SafeRedis {
     /** 跑 Lua 等自定义操作时的降级入口（如 RedisLockUtils.unlock） */
     public void swallow(Runnable op, String opName, String key) {
         swallowQuietly(op, opName, key);
+    }
+
+    /**
+     * 跑「要回一个数字」的 Lua 脚本（滑动窗口限流那种【判定 + 写入必须原子】的场景）。
+     * 上面那个 swallow 只能不管返回值，而限流必须知道「这次到底放没放行」，所以单独开一个入口。
+     * null = 不知道（异常或熔断），方向由调用方决定 —— 与 incrOrNull 同一条约定，不要在这里替业务做主。
+     */
+    public Long evalLongOrNull(RedisScript<Long> script, List<String> keys, List<String> args) {
+        String logKey = keys.isEmpty() ? "-" : keys.get(0);
+        return degrade(() -> stringRedisTemplate.execute(script, keys, args.toArray()), "EVAL", logKey, null);
     }
 
     private boolean swallowQuietly(Runnable op, String opName, String key) {

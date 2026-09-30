@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campus.trade.bean.DTO.request.comment.CommentAddDTO;
 import com.campus.trade.bean.DTO.result.MyResult;
 import com.campus.trade.bean.utils.Log;
+import com.campus.trade.bean.utils.RateLimit;
 import com.campus.trade.bean.vo.CommentVo;
 import com.campus.trade.service.CommentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,6 +27,9 @@ public class CommentController {
     @PostMapping("/add")
     @Operation(summary = "发表评论")
     @Log("发表评论")
+    //UGC 入口里被刷得最便宜的一个：一次请求就落一行，而且还会进审核、进商品详情页的缓存失效。
+    //10 条/分钟不是人能维持的速度（写完一条总得看一眼别人的回复），而脚本会立刻撞上这一行
+    @RateLimit(maxCount = 10, message = "评论过于频繁，请稍后再试")
     public MyResult<Void> addComment(@Valid @RequestBody CommentAddDTO commentAddDTO, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
         commentService.addComment(commentAddDTO, loginUserId);

@@ -26,11 +26,14 @@ public interface GoodsMapper extends BaseMapper<Goods> {
     @Update("UPDATE goods SET view_count = view_count + #{delta} WHERE id = #{goodsId}")
     int incrViewCount(@Param("goodsId") Long goodsId, @Param("delta") long delta);
 
-    // 对账用：找出冗余列与 collect 表真实条数不一致的商品（collect 表才是唯一真相源）
+    // 对账用：找出冗余列与 collect 表真实条数不一致的商品（collect 表才是唯一真相源）。
+    // g.deleted = 0 必须写：已逻辑删除的商品其 collect_count 不再对外可见，把它捞进差集会
+    // 让校准任务天天去 UPDATE 一行没人读的数据，还会把“发现漂移”这个告警刷到不可用
+    //（告警被噪声吞掉比没有告警更糟），而它的 collect 行已在删商品时被清掉，真值永远是 0
     @Select("SELECT g.id AS goodsId, IFNULL(c.cnt, 0) AS realCount, g.collect_count AS wrongCount " +
             "FROM goods g LEFT JOIN (SELECT goods_id, COUNT(*) AS cnt FROM collect GROUP BY goods_id) c " +
             "  ON c.goods_id = g.id " +
-            "WHERE g.collect_count <> IFNULL(c.cnt, 0) " +
+            "WHERE g.collect_count <> IFNULL(c.cnt, 0) AND g.deleted = 0 " +
             "LIMIT #{limit}")
     List<Map<String, Object>> selectCollectCountDrift(@Param("limit") int limit);
 

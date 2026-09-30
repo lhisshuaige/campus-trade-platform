@@ -63,6 +63,13 @@ jwt:
 
 upload:
   path: ${UPLOAD_PATH:D:/upload/campus-trade/}
+  # 图片对外基地址，例：https://img.example.com。留空 = 从请求自身推断（只适合本机直连）。
+  # 反代/负载均衡后必须配：request.getServerName() 拿到的是内部地址，用户浏览器打不开，
+  # 而这个 URL 会存进 goods.imgUrl 让别的用户去加载 —— 代码里刻意不去信 X-Forwarded-Host（那是客户端可伪造的头）
+  base-url: ${UPLOAD_BASE_URL:}
+  # 单用户每日上传张数上限。用的是「上传专属」的计数桶，不与登录/登出共用（见 RedisContent.User_Upload_Count_KEY）：
+  # 刷满只会不能传图，不会把人锁在系统外
+  max-per-user-per-day: 30
 
 # springdoc-openapi项目配置
 springdoc:
@@ -85,6 +92,15 @@ knife4j:
     language: zh_cn
 
 app:
+  cors:
+    # 允许的跨域来源，逗号分隔。默认只放本机 = fail-closed：生产忘配时是「前端调不通、立刻被发现」，
+    # 而不是「悄悄向全网开着」。放真实域名走这里（或环境变量），不改代码
+    # 写法用 allowedOriginPatterns 的语法，支持 http://localhost:* 这种带端口的通配
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+    # 默认关：本站登录态在 Authorization 头里，不依赖 Cookie。
+    # 开着它 = 把「浏览器自动携带 cookie」这条通道开给白名单里的每一个来源，
+    # 而目前没有任何一个来源需要它；将来真上 Cookie 会话时再按环境打开
+    allow-credentials: false
   trade:
     lock-probe-interval-ms: 5000   #后台探测 = 熔断的半开试探者 = Redisson 客户端重建者
   collect-calibration:
@@ -110,9 +126,27 @@ app:
     login-fail-max: 5
     # 账号锁定时长（分钟）= 失败计数的 Redis TTL，到期自动解锁，无需定时任务
     login-lock-minutes: 15
+  rate-limit:
+    # @RateLimit 总开关（P2-11）：本地压测/演示时一把关掉，不必改代码
+    enabled: true
+    # Redis 异常/熔断判不出来时走本地令牌桶继续限流，而不是直接放行。
+    # 这一项就是「限流 fail-open」那个老口径的补丁：关掉 = 回到「Redis 挂了就等于没限流」
+    local-fallback: true
+    # IP 维度默认用连接地址而不是 X-Forwarded-For：XFF 是客户端可伪造的请求头，
+    # 拿它当限流 key 等于攻击者在头里换一个值就能绕过整层限流。
+    # 与 FileController 不回退读 X-Forwarded-Host 是同一条纪律（只有 LogAspect 读 XFF 当排查线索，不参与判定）
+    use-forwarded-for: false
   redis:
     # false=Redis 不可用时照常启动并降级运行（本地/演示友好）；true=启动探测失败即拒绝启动（生产建议）
     required: false
+  search:
+    # 商品标题搜索走 MySQL FULLTEXT(ngram) 还是 LIKE '%kw%'（P3-2）。
+    # true（默认）= MATCH(title) AGAINST(... IN BOOLEAN MODE)，能走倒排索引，但硬前置是
+    # goods 上已经建上 ft_goods_title（见 init.sql 末尾【存量库增量升级 · P3】那一段）；
+    # 没建上不会「静默回到慢路径」，而是搜索接口直接 500（MySQL 1191）——刻意选这个方向：
+    # 静默回退等于「上了全文索引」这件事永远没人发现。跑不了 DDL 的环境翻成 false 即可
+    # （两个失败方向与代价的完整推演见 GoodsServiceImp.fulltextEnabled）
+    fulltext-enabled: ${APP_SEARCH_FULLTEXT:true}
   content:
     #UGC 审核总开关：批量灌数据/演示时可临时关掉，不必为造数据先想一套“不含敏感词”的说法
     audit-enabled: true

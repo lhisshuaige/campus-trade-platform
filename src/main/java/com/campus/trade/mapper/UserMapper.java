@@ -24,4 +24,9 @@ public interface UserMapper extends BaseMapper<User> {
     // 改密：新密码 + token_version 自增一条 SQL 搞定，语义与禁用一致（旧 Token 立即失效）
     @Update("UPDATE `user` SET password = #{password}, token_version = token_version + 1 WHERE id = #{userId}")
     int updatePasswordAndBumpVersion(@Param("userId") Long userId, @Param("password") String password);
+
+    // 全端登出：只动版本号，不碰 status（登出不是处罚，解禁逻辑不该被牵连）。
+    // 同样不在 Java 里读出来 +1 再写回 —— 与并发改密/禁用互相覆盖会把“已失效的 Token 又活了”做实
+    @Update("UPDATE `user` SET token_version = token_version + 1 WHERE id = #{userId}")
+    int bumpTokenVersion(@Param("userId") Long userId);
 }

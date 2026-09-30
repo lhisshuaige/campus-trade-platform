@@ -3,7 +3,12 @@ package com.campus.trade.controller;
 import com.campus.trade.bean.entry.Role;
 import com.campus.trade.bean.utils.RequireRole;
 import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.vo.CategoryGoodsCountVo;
+import com.campus.trade.bean.vo.GoodsStatusCountVo;
+import com.campus.trade.bean.vo.HotGoodsVo;
+import com.campus.trade.bean.vo.PriceRangeCountVo;
 import com.campus.trade.bean.vo.StatisticsOverviewVo;
+import com.campus.trade.bean.vo.UserGoodsRankVo;
 import com.campus.trade.service.StatisticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -11,7 +16,6 @@ import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 数据统计接口：对平台数据进行聚合分析、加工处理
@@ -32,32 +36,32 @@ public class StatisticsController {
     }
 
     @GetMapping("/categoryGoods")
-    @Operation(summary = "各分类商品数量统计")
-    public MyResult<List<Map<String, Object>>> categoryGoods() {
+    @Operation(summary = "各分类商品数量统计", description = "没有商品的分类也会返回，count 为 0")
+    public MyResult<List<CategoryGoodsCountVo>> categoryGoods() {
         return MyResult.success(statisticsService.getCategoryGoodsCount());
     }
 
     @GetMapping("/goodsStatus")
-    @Operation(summary = "商品状态分布统计")
-    public MyResult<List<Map<String, Object>>> goodsStatus() {
+    @Operation(summary = "商品状态分布统计", description = "status 原值与中文标签一起给，看板不用再维护一份映射")
+    public MyResult<List<GoodsStatusCountVo>> goodsStatus() {
         return MyResult.success(statisticsService.getGoodsStatusCount());
     }
 
     @GetMapping("/hotGoods")
     @Operation(summary = "热门商品排行", description = "按收藏数降序排列")
-    public MyResult<List<Map<String, Object>>> hotGoods(@RequestParam(defaultValue = "10") Integer limit) {
+    public MyResult<List<HotGoodsVo>> hotGoods(@RequestParam(defaultValue = "10") Integer limit) {
         return MyResult.success(statisticsService.getHotGoods(limit));
     }
 
     @GetMapping("/priceRange")
     @Operation(summary = "商品价格区间分布")
-    public MyResult<List<Map<String, Object>>> priceRange() {
+    public MyResult<List<PriceRangeCountVo>> priceRange() {
         return MyResult.success(statisticsService.getPriceRange());
     }
 
     @GetMapping("/userGoodsRank")
     @Operation(summary = "卖家发布商品排行")
-    public MyResult<List<Map<String, Object>>> userGoodsRank(@RequestParam(defaultValue = "10") Integer limit) {
+    public MyResult<List<UserGoodsRankVo>> userGoodsRank(@RequestParam(defaultValue = "10") Integer limit) {
         return MyResult.success(statisticsService.getUserGoodsRank(limit));
     }
 }

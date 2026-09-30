@@ -22,7 +22,7 @@ import jakarta.annotation.Resource;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,7 +43,11 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
     @Resource
     private UserActionLimitUtils userActionLimitUtils;
 
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    // 编码器由容器给（P2-10），不再在这里自己 new：
+    // “本站用什么算法、什么强度”只能有一份答案，写在 SecurityConfig 的 @Bean 里；
+    // 字段类型取接口，将来换 Argon2 只改那一个 @Bean，本类一行不动
+    @Resource
+    private PasswordEncoder passwordEncoder;
 
     //每日登录 + 登出总量上限：防脚本滥用（与下面的「连续失败锁定」是两个维度，不要混为一谈）
     //上限做成配置，避免再出现「注释写 5 次、代码写 100 次」这种漂移
@@ -136,6 +140,24 @@ public class UserServiceImp extends ServiceImpl<UserMapper, User> implements Use
         //计入当日次数（登出本身始终放行，避免用户被锁死）
         userActionLimitUtils.tryAcquire(jwtUtils.getUserId(token), maxLoginLogoutPerDay);
         tokenBlacklistUtils.add(token);
+    }
+
+    // 全端登出：不是“把这一个设备退掉”，而是“把这个账号发出去的全部 Token 收回来”
+    @Override
+    public void logoutAll(Long userId) {
+        //复用登录/登出的当日额度。这条跟 logout 不是一个代价：它每次都要写库 + bump 版本，
+        //不限流就能被脚本把 token_version 一路自增（而每一跳都把所有旧 Token 作废，
+        //对着一个正在登录的会话反复调就是持续自我踢下线）
+        if (!userActionLimitUtils.tryAcquire(userId, maxLoginLogoutPerDay)) {
+            throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "今日登录/登出次数已达上限,请明天再试");
+        }
+        //为什么不能用黑名单：黑名单只认服务器此刻见过的这一个 token，而手机/平板/网页各持有一份，
+        //服务器根本枚举不出“这个用户名下现在一共飘着几个未过期 Token”。
+        //token_version 是用户级的一把开关：改一次，此后所有旧版本一律比对不上
+        userMapper.bumpTokenVersion(userId);
+        //与改密/禁用同一条失效协议：只改库不删缓存，拦截器在 TTL（5 分钟）内仍拿到旧版本号、
+        //比对通过，全端登出就形同没生效 —— P0-8 已经踩过的同一个坑
+        tokenVersionUtils.evictAfterCommit(userId);
     }
 
     //获取当前登录用户信息

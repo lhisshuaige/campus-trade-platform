@@ -1,0 +1,62 @@
+# ==============================================================================
+# 正式环境 profile：--spring.profiles.active=prod（或环境变量 SPRING_PROFILES_ACTIVE=prod）
+#
+# 与 application-local.yaml 的分工：local 是「我机器上的私有值」（含真实密码，被 gitignore，不入库）；
+# prod 是「公开的部署骨架」（入库）—— 一个新人 clone 下来该知道生产要配哪几个环境变量，就看这个文件。
+# 因此这里只写开关与地址，不写任何密钥：密码一律走 ${DB_PASSWORD}/${REDIS_PASSWORD}/${JWT_SECRET}
+# ==============================================================================
+
+app:
+  cors:
+    # 必须显式给出真实前端域名，逗号分隔多个：
+    #   APP_CORS_ALLOWED_ORIGIN_PATTERNS=https://campus.example.com,https://admin.example.com
+    # 默认值仍然只放本机 —— 故意不给一个「忘配也能跑」的宽松默认，
+    # 否则 P2-5 的白名单在唯一需要它的地方失效，而且失败是静默的
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*}
+    allow-credentials: false
+  auth:
+    # 把 fail-open 翻成 fail-close：Redis 不可用时宁可让请求吃 401，
+    # 也不能让「已登出的 Token 在故障窗口里复活」（本地保持默认 true，否则没 Redis 就什么都干不了）
+    blacklist-fail-open: false
+  rate-limit:
+    # 本文件假定前面有 nginx，且用的是 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for。
+    # 不打开这个开关，getRemoteAddr() 永远是 127.0.0.1，登录/注册这类匿名入口会变成
+    # 「全站每分钟共 30 次」——这不是严格，是把限流做成了 Denial of Service（DoS 到自己用户）
+    # 取的是 XFF 最右边那一段（本层反代追加的那个），而不是第一段，理由见 RateLimitInterceptor
+    # 如果生产其实是直连（没有反代改写请求头），必须改回 false：那里伪造的头会被当成真实来源
+    use-forwarded-for: true
+  redis:
+    # 与上面那条配套：既然选了 fail-close，就必须保证 Redis 在。
+    # 探测失败直接拒绝启动，好过起来一个没人能登录的站（P0-2 里说的「问题在部署期暴露」）
+    required: true
+  search:
+    # 生产保持全文搜索（默认 true），但**部署清单里多一项**：目标库必须先跑过
+    # init.sql 末尾【存量库增量升级 · P3】那段 DDL（建 ft_goods_title），否则搜索接口 500。
+    # 这里的 true 不是「一个可以后改的偏好」，它是「库与代码必须同版本」这个约束的一个具体出口：
+    # 没有 Flyway 把 DDL 管起来（P3-15）之前，这类隐式前置只能靠部署清单本身列出来
+    fulltext-enabled: ${APP_SEARCH_FULLTEXT:true}
+
+upload:
+  # 生产是反代/对象存储部署，必须给出对外地址；代码不回退去读 X-Forwarded-Host（理由见 FileController）
+  base-url: ${UPLOAD_BASE_URL:}
+  path: ${UPLOAD_PATH:/data/campus-trade/upload/}
+  # 比开发环境收紧：够正常用户发商品，挡的是脚本刷盘（本地磁盘是唯一没有备份、也上不了水平扩展的组件）
+  max-per-user-per-day: 20
+
+# ---- 接口文档在正式环境一律关闭（P2-8）----
+knife4j:
+  enable: false
+
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    # 关掉后 /v3/api-docs 不再注册；Knife4jConfig 的 OpenAPI bean 也因为这个条件而不创建
+    #（@ConditionalOnProperty(name = "knife4j.enable")）
+    enabled: false
+
+# 顺带关掉 SQL 控制台输出（生产把整条 SQL + 参数打进 stdout 是实打实的信息泄露）。
+# logback-spring.xml 与 actuator 健康检查仍是 P3-17 的欠账，这里只把这行噪音掐掉
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl

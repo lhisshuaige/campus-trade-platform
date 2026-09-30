@@ -40,7 +40,10 @@ public class MiddlewareHealthChecker implements ApplicationRunner {
             log.info("Redis(Lettuce) 可用 {}:{} —— 缓存/限流/黑名单全部正常", host, port);
         } catch (Exception e) {
             redisUsable = false;
-            log.warn("Redis(Lettuce) 不可用 {}:{}，已进入降级模式：缓存直查DB、限流放行、黑名单按 fail-open 配置处理。原因：{}",
+            //“限流放行”这句已经不准了：@RateLimit 从 P2-11 起有本地兜底桶，Redis 断了照样拦；
+            //真正还是放行的只有【当日额度】那一类计数（INCR 拿不到值），两者必须分开报
+            log.warn("Redis(Lettuce) 不可用 {}:{}，已进入降级模式：缓存直查DB、@RateLimit 改走本地兜底桶、"
+                            + "当日额度计数放行、黑名单按 fail-open 配置处理。原因：{}",
                     host, port, e.getMessage());
         }
         // 交易锁能力单独探一次（warmUp 只建客户端、不改熔断状态）

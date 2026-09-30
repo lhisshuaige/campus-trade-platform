@@ -10,9 +10,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,21 +31,53 @@ public class CacheUtils {
 
     private static final AtomicInteger THREAD_SEQ = new AtomicInteger();
 
-    // 逻辑过期场景下用于异步重建缓存的线程池（守护线程，随 JVM 退出）
-    private static final ExecutorService REBUILD_EXECUTOR = Executors.newFixedThreadPool(
-            4, r -> {
+    // 重建线程数：4。再大也不会更快 —— 底下是 Lettuce 那一条共享连接，多线程只是把同一条队排得更长
+    private static final int REBUILD_THREADS = 4;
+    // 重建队列容量：宁可拒接新任务，也不让任务无界堆积（见下面 REBUILD_EXECUTOR 的注释）
+    private static final int REBUILD_QUEUE_CAPACITY = 200;
+
+    /**
+     * 逻辑过期场景下用于异步重建缓存的线程池（守护线程，随 JVM 退出）。
+     * <p>
+     * 为什么不用 {@code Executors.newFixedThreadPool(4)}：它背后是**无界** LinkedBlockingQueue，
+     * 而重建速度由 Redis/DB 决定、提交速度由流量决定——热点 key 刚过期 + 后端变慢的那一段，
+     * 堆积是注定的，而一个能无限长的队列只是把「后端慢」放大成「OOM」。
+     * <p>
+     * 为什么这个任务**可以丢**：重建失败只是下次请求再试一次，业务侧当时已经拿到旧值了，
+     * 所以「有界 + 拒接」是正确的，而不是丢那一条请求就出错。
+     * <p>
+     * 为什么不是 {@code DiscardPolicy}：任务是**抢到分布式锁之后**才提交的，
+     * 静默丢掉意味着 finally 里的 unlock 根本不跑，这把锁要白占到 10s TTL 自然过期，
+     * 期间全部请求都拿不到重建权——等于用一个 OOM 面换一个「无人重建」窗口。
+     * 所以用 AbortPolicy 抛异常，由提交处接住并**立即归还锁**（见 getOrLoad）
+     */
+    private static final ThreadPoolExecutor REBUILD_EXECUTOR = new ThreadPoolExecutor(
+            REBUILD_THREADS, REBUILD_THREADS, 0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(REBUILD_QUEUE_CAPACITY),
+            r -> {
                 Thread t = new Thread(r, "cache-rebuild-" + THREAD_SEQ.incrementAndGet());
                 t.setDaemon(true);
                 return t;
-            });
+            },
+            new ThreadPoolExecutor.AbortPolicy());
 
     // 延迟双删调度线程池（守护线程，只负责"稍后再补删一次"）
-    private static final ScheduledExecutorService EVICT_SCHEDULER = Executors.newScheduledThreadPool(
+    // 直接 new 实现类而不是 Executors.newScheduledThreadPool：只有实现类暴露 getQueue()，
+    // 而下面那个队列护栏需要它（ScheduledExecutorService 接口上没有队列可查，多一次强转只是把同一件事写难看）
+    private static final ScheduledThreadPoolExecutor EVICT_SCHEDULER = new ScheduledThreadPoolExecutor(
             2, r -> {
                 Thread t = new Thread(r, "cache-evict-" + THREAD_SEQ.incrementAndGet());
                 t.setDaemon(true);
                 return t;
             });
+
+    /**
+     * 补删队列的护栏。调度池用的是 {@code DelayedWorkQueue}（无界），但**不能**照上面那样改成有界：
+     * 优先级队列的「满」没有意义——拒接最早要执行的那一条反而错得更多，
+     * 所以这里用「提交前看队列长度」代替容量限制。被跳过的那次补删只是少删一次，
+     * 脏值最长活到逻辑过期就自己好了，不会写坏数据
+     */
+    private static final int EVICT_QUEUE_GUARD = 2000;
 
     // 延迟双删的等待时间：需大于"一次回源查库 + 回填缓存"的最坏耗时
     private static final long DELAYED_EVICT_MILLIS = 500L;
@@ -85,15 +118,22 @@ public class CacheUtils {
             String lockKey = LOCK_PREFIX + key;
             String lockValue = redisLockUtils.tryLock(lockKey, LOCK_TTL);
             if (lockValue != null) {
-                REBUILD_EXECUTOR.submit(() -> {
-                    try {
-                        rebuild(key, logicalTtl, loader);
-                    } catch (Exception e) {
-                        log.error("缓存异步重建失败 key={}", key, e);
-                    } finally {
-                        redisLockUtils.unlock(lockKey, lockValue);
-                    }
-                });
+                // 队列满时 submit 直接抛 RejectedExecutionException：必须在**这里**接住并把锁还回去，
+                // 否则锁会一直占到 TTL 自然过期，那 10 秒里谁都无法重建（旧值照旧返回，但新值永远上不来）
+                try {
+                    REBUILD_EXECUTOR.submit(() -> {
+                        try {
+                            rebuild(key, logicalTtl, loader);
+                        } catch (Exception e) {
+                            log.error("缓存异步重建失败 key={}", key, e);
+                        } finally {
+                            redisLockUtils.unlock(lockKey, lockValue);
+                        }
+                    });
+                } catch (RejectedExecutionException e) {
+                    log.warn("重建队列已满({})，本次不重建，锁已归还 key={}", REBUILD_QUEUE_CAPACITY, key);
+                    redisLockUtils.unlock(lockKey, lockValue);
+                }
             }
             return deserialize(entry, deserializer);
         }
@@ -160,6 +200,12 @@ public class CacheUtils {
 
     private void doEvictWithDelay(String key) {
         evict(key);
+        // 主删已经做了，补删只是兜住「删除瞬间仍在飞行中的旧读请求」回填的旧值，
+        // 所以队列反常时选择跳过而不是排队（见 EVICT_QUEUE_GUARD）
+        if (EVICT_SCHEDULER.getQueue().size() >= EVICT_QUEUE_GUARD) {
+            log.warn("补删队列已满({})，跳过本次延迟补删 key={}", EVICT_QUEUE_GUARD, key);
+            return;
+        }
         EVICT_SCHEDULER.schedule(() -> evict(key), DELAYED_EVICT_MILLIS, TimeUnit.MILLISECONDS);
     }
 
