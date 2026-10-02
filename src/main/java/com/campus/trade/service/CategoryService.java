@@ -1,7 +1,7 @@
 package com.campus.trade.service;
 
-import com.campus.trade.bean.DTO.request.category.CategoryAddDTO;
-import com.campus.trade.bean.DTO.request.category.CategoryUpdateDTO;
+import com.campus.trade.bean.dto.request.category.CategoryAddDTO;
+import com.campus.trade.bean.dto.request.category.CategoryUpdateDTO;
 import com.campus.trade.bean.vo.CategoryVo;
 
 import java.util.List;

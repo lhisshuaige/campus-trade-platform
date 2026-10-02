@@ -1,7 +1,7 @@
 package com.campus.trade.controller;
 
-import com.campus.trade.bean.DTO.request.report.ReportAddDTO;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.request.report.ReportAddDTO;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.utils.RateLimit;
 import com.campus.trade.service.ReportService;

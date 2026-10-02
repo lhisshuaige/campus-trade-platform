@@ -3,10 +3,10 @@ package com.campus.trade.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.utils.RateLimit;
-import com.campus.trade.bean.DTO.request.goods.GoodsAddDTO;
-import com.campus.trade.bean.DTO.request.goods.GoodsPageQueryDTO;
-import com.campus.trade.bean.DTO.request.goods.GoodsUpdateDTO;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.request.goods.GoodsAddDTO;
+import com.campus.trade.bean.dto.request.goods.GoodsPageQueryDTO;
+import com.campus.trade.bean.dto.request.goods.GoodsUpdateDTO;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.vo.GoodsDetailVo;
 import com.campus.trade.bean.vo.GoodsVo;
 import com.campus.trade.service.GoodsService;
@@ -51,11 +51,11 @@ public class GoodsController {
     @PutMapping("/changeStatus")
     @Operation(summary = "修改商品状态,商品上下架")
     @Log("修改商品状态")
-    public MyResult<Void> changeStatus(@RequestParam("id") Long GoodsId,
+    public MyResult<Void> changeStatus(@RequestParam("id") Long goodsId,
                                        @RequestParam("status") Integer status,
                                         HttpServletRequest  request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        goodsService.changeStatus(GoodsId, status, loginUserId);
+        goodsService.changeStatus(goodsId, status, loginUserId);
         return MyResult.success();
     }
 
@@ -89,9 +89,9 @@ public class GoodsController {
     //（原来前端要为这三个信息再调 /user/profile/{id} 和 /collect/isCollect）
     @GetMapping("/getDetail")
     @Operation(summary = "获取商品详细信息", description = "聚合卖家展示信息；登录时附带 isCollected/isOwner，匿名访问二者为 false")
-    public MyResult<GoodsDetailVo> getDetail(@RequestParam("id") Long GoodsId, HttpServletRequest request) {
+    public MyResult<GoodsDetailVo> getDetail(@RequestParam("id") Long goodsId, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        GoodsDetailVo goods = goodsService.getGoodsDetail(GoodsId, loginUserId);
+        GoodsDetailVo goods = goodsService.getGoodsDetail(goodsId, loginUserId);
         return MyResult.success(goods);
     }
 

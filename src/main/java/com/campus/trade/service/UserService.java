@@ -1,11 +1,11 @@
 package com.campus.trade.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.campus.trade.bean.entry.User;
-import com.campus.trade.bean.DTO.request.user.UserChangePasswordDTO;
-import com.campus.trade.bean.DTO.request.user.UserLoginDTO;
-import com.campus.trade.bean.DTO.request.user.UserRegisterDTO;
-import com.campus.trade.bean.DTO.request.user.UserUpdateDTO;
+import com.campus.trade.bean.entity.User;
+import com.campus.trade.bean.dto.request.user.UserChangePasswordDTO;
+import com.campus.trade.bean.dto.request.user.UserLoginDTO;
+import com.campus.trade.bean.dto.request.user.UserRegisterDTO;
+import com.campus.trade.bean.dto.request.user.UserUpdateDTO;
 import com.campus.trade.bean.vo.UserProfileVo;
 import com.campus.trade.bean.vo.UserVo;
 

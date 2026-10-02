@@ -1,6 +1,6 @@
 package com.campus.trade.bean.utils;
 
-import com.campus.trade.bean.entry.Role;
+import com.campus.trade.bean.entity.Role;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

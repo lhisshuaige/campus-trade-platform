@@ -1,8 +1,8 @@
 package com.campus.trade.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.DTO.request.comment.CommentAddDTO;
-import com.campus.trade.bean.DTO.request.comment.CommentAdminQueryDTO;
+import com.campus.trade.bean.dto.request.comment.CommentAddDTO;
+import com.campus.trade.bean.dto.request.comment.CommentAdminQueryDTO;
 import com.campus.trade.bean.vo.CommentAdminVo;
 import com.campus.trade.bean.vo.CommentVo;
 

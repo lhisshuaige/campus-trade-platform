@@ -1,7 +1,7 @@
 package com.campus.trade.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.campus.trade.bean.entry.OperLog;
+import com.campus.trade.bean.entity.OperLog;
 import org.apache.ibatis.annotations.Mapper;
 
 /**

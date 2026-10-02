@@ -1,7 +1,7 @@
 package com.campus.trade.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.DTO.request.notice.NoticePageQueryDTO;
+import com.campus.trade.bean.dto.request.notice.NoticePageQueryDTO;
 import com.campus.trade.bean.vo.NoticeVo;
 
 public interface NoticeService {

@@ -1,8 +1,8 @@
 package com.campus.trade.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.DTO.request.notice.NoticePageQueryDTO;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.request.notice.NoticePageQueryDTO;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.vo.NoticeVo;
 import com.campus.trade.service.NoticeService;
 import io.swagger.v3.oas.annotations.Operation;

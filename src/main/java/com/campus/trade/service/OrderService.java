@@ -1,8 +1,8 @@
 package com.campus.trade.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.DTO.request.order.OrderAdminQueryDTO;
-import com.campus.trade.bean.DTO.request.order.OrderCreateDTO;
+import com.campus.trade.bean.dto.request.order.OrderAdminQueryDTO;
+import com.campus.trade.bean.dto.request.order.OrderCreateDTO;
 import com.campus.trade.bean.vo.OrderVo;
 
 public interface OrderService {

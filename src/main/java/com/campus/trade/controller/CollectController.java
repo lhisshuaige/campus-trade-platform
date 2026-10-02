@@ -1,8 +1,8 @@
 package com.campus.trade.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.DTO.request.collect.CollectAddDTO;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.request.collect.CollectAddDTO;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.vo.CollectVo;
 import com.campus.trade.service.CollectService;

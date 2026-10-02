@@ -1,8 +1,8 @@
 package com.campus.trade.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.DTO.request.report.ReportAddDTO;
-import com.campus.trade.bean.DTO.request.report.ReportAdminQueryDTO;
+import com.campus.trade.bean.dto.request.report.ReportAddDTO;
+import com.campus.trade.bean.dto.request.report.ReportAdminQueryDTO;
 import com.campus.trade.bean.vo.ReportVo;
 
 public interface ReportService {

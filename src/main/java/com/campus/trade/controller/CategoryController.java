@@ -1,11 +1,11 @@
 package com.campus.trade.controller;
 
-import com.campus.trade.bean.entry.Role;
+import com.campus.trade.bean.entity.Role;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.utils.RequireRole;
-import com.campus.trade.bean.DTO.request.category.CategoryAddDTO;
-import com.campus.trade.bean.DTO.request.category.CategoryUpdateDTO;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.request.category.CategoryAddDTO;
+import com.campus.trade.bean.dto.request.category.CategoryUpdateDTO;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.vo.CategoryVo;
 import com.campus.trade.service.CategoryService;
 import io.swagger.v3.oas.annotations.Operation;

@@ -1,8 +1,8 @@
 package com.campus.trade.controller;
 
-import com.campus.trade.bean.entry.Role;
+import com.campus.trade.bean.entity.Role;
 import com.campus.trade.bean.utils.RequireRole;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.vo.CategoryGoodsCountVo;
 import com.campus.trade.bean.vo.GoodsStatusCountVo;
 import com.campus.trade.bean.vo.HotGoodsVo;

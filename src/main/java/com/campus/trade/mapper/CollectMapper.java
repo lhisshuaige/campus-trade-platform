@@ -3,7 +3,7 @@ package com.campus.trade.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.campus.trade.bean.entry.Collect;
+import com.campus.trade.bean.entity.Collect;
 import com.campus.trade.bean.vo.CollectVo;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

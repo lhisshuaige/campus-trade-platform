@@ -1,10 +1,10 @@
 package com.campus.trade.controller;
 
-import com.campus.trade.bean.DTO.request.user.UserChangePasswordDTO;
-import com.campus.trade.bean.DTO.request.user.UserLoginDTO;
-import com.campus.trade.bean.DTO.request.user.UserRegisterDTO;
-import com.campus.trade.bean.DTO.request.user.UserUpdateDTO;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.request.user.UserChangePasswordDTO;
+import com.campus.trade.bean.dto.request.user.UserLoginDTO;
+import com.campus.trade.bean.dto.request.user.UserRegisterDTO;
+import com.campus.trade.bean.dto.request.user.UserUpdateDTO;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.utils.RateLimit;
 import com.campus.trade.bean.vo.UserProfileVo;

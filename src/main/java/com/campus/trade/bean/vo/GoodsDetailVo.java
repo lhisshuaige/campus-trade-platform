@@ -26,9 +26,14 @@ public class GoodsDetailVo {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 
-    //卖家展示信息：昵称/头像可公开；id、手机号、账号状态一律不外泄（脱敏白名单）
+    //卖家展示信息：昵称/头像可公开；手机号、账号状态一律不外泄（脱敏白名单）
     private String sellerNickname;
     private String sellerAvatar;
+    //「不暴露内部标识」规范的一次有意突破，理由是具体的：/user/profile/{userId} 本就是
+    //公开可枚举的接口，sellerId 不扩大任何隐私面；而"访问卖家主页/私信卖家"两个入口
+    //都需要它——没有它前端只能再去调一次 profile，为一个跳转绕一圈才是怪事。
+    //只加在 DetailVo：列表 GoodsVo 一行一个卡片，用不上跳转参数，保持干净
+    private Long sellerId;
 
     //发布者主动公开的联系方式：只对登录用户返回，匿名访客为 null（把入口留给"愿意注册来看"的人）
     //不返回的是用户表里的 phone，两者不同：一个是发布者愿意给陌生人的联系渠道，一个是账号隐私

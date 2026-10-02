@@ -1,7 +1,7 @@
 package com.campus.trade.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.campus.trade.bean.entry.User;
+import com.campus.trade.bean.entity.User;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;

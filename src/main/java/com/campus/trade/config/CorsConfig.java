@@ -1,32 +1,24 @@
 package com.campus.trade.config;
 
-import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
-import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
 
+/**
+ * CORS 白名单（P2-5）。
+ * <p>
+ * 这个类以前叫 CorsConfig 却同时干着三件事：CORS、四个拦截器的注册、上传目录的静态资源映射（P3-16）。
+ * 后两件已经拆到 {@link WebMvcConfig}。拆的理由不是命名洁癖，而是拦截器的 order 0/1/2/3 是本项目的
+ * 安全边界定义处，它应该住在一个名字能让人一眼找到的文件里
+ * <p>
+ * 一个应用可以有多个 {@link WebMvcConfigurer}，Spring 全部收集并依次回调，所以这次拆分不丢配置；
+ * 拦截器彼此的先后只由 order 决定，与它注册在哪个类无关
+ */
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
-
-    @Resource
-    private JwtInterceptor jwtInterceptor;
-
-    @Resource
-    private RoleInterceptor roleInterceptor;
-
-    @Resource
-    private OptionalAuthInterceptor optionalAuthInterceptor;
-
-    @Resource
-    private RateLimitInterceptor rateLimitInterceptor;
-
-    @Value("${upload.path}")
-    private String uploadPath;
 
     // ==== CORS 白名单（P2-5）====
     // 原来是 allowedOriginPatterns("*")：任何网页都能让自己的 JS 向本站发跨域请求。
@@ -54,55 +46,4 @@ public class CorsConfig implements WebMvcConfigurer {
                 .maxAge(3600);
     }
 
-    @Override
-    public void addInterceptors(InterceptorRegistry registry) {
-        // 可选认证拦截器：仅为公开接口注入"可选"登录态（有 token 且有效才注入，否则按匿名），最先执行
-        registry.addInterceptor(optionalAuthInterceptor)
-                .addPathPatterns(
-                        "/goods/getAll",
-                        "/goods/getDetail",
-                        "/category/getAll",
-                        "/comment/list",
-                        "/user/profile/**"
-                ).order(0);
-        // 认证拦截器：校验登录状态（先执行）
-        registry.addInterceptor(jwtInterceptor)
-                .addPathPatterns("/**")
-                .excludePathPatterns(
-                        "/user/login",
-                        "/user/register",
-                        "/doc.html",
-                        "/webjars/**",
-                        "/swagger-resources/**",
-                        "/v3/api-docs/**",
-                        "/favicon.ico",
-                        "/upload/**",
-                        // 商品浏览相关：无需登录即可浏览、搜索商品
-                        // 排行榜也不挂 optionalAuth：返回内容与人无关，
-                        // 多一次 token 解析 + Redis 读只是给最热公开接口白白加成本
-                        "/goods/getAll",
-                        "/goods/getDetail",
-                        "/goods/getCollectRank",
-                        "/category/getAll",
-                        "/comment/list",
-                        "/user/profile/**"
-                ).order(1);
-        // 限流拦截器：仅对标注 @RateLimit 的接口生效（白名单式，没标注解一律放行）
-        // 为什么排在认证之后：那个维度要按 userId 计，就得先有人把 loginUserId 写进 request；
-        // 否则所有写接口只能按 IP 计，一个机房出口的人就共用一份额度（而登录/注册这两个匿名入口
-        // 本来就在 Jwt 的排除名单里，不受这次排序影响）
-        // 为什么排在授权之前：先量后权 —— 一个正在被脚本刷的调用方，不该先花一次权限判定再被拒
-        registry.addInterceptor(rateLimitInterceptor)
-                .addPathPatterns("/**").order(2);
-        // 授权拦截器：校验角色权限（最后执行，仅对标注 @RequireRole 的接口生效。原来占的是 order=2）
-        registry.addInterceptor(roleInterceptor)
-                .addPathPatterns("/**").order(3);
-    }
-
-    @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 将 /upload/** 映射到本地磁盘目录，用于访问上传的图片
-        registry.addResourceHandler("/upload/**")
-                .addResourceLocations("file:" + uploadPath);
-    }
 }

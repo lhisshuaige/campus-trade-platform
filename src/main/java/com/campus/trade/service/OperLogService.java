@@ -1,8 +1,8 @@
 package com.campus.trade.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.DTO.request.log.OperLogQueryDTO;
-import com.campus.trade.bean.entry.OperLog;
+import com.campus.trade.bean.dto.request.log.OperLogQueryDTO;
+import com.campus.trade.bean.entity.OperLog;
 import com.campus.trade.bean.vo.OperLogVo;
 
 public interface OperLogService {

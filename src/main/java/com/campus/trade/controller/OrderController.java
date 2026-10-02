@@ -1,13 +1,13 @@
 package com.campus.trade.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.DTO.request.order.OrderCreateDTO;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.request.order.OrderCreateDTO;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.utils.RateLimit;
 import com.campus.trade.bean.vo.OrderVo;
 import com.campus.trade.service.OrderService;
-import com.campus.trade.service.imp.OrderTradeFacade;
+import com.campus.trade.service.impl.OrderTradeFacade;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
