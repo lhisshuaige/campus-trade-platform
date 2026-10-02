@@ -1,0 +1,93 @@
+#!/bin/sh
+#
+# commit-msg —— 校验提交信息标题的格式（type(scope)[!]: 内容）
+#
+# 启用（本机一次，不改仓库、不影响他人）：
+#     git config core.hooksPath .githooks
+# 如果不想改 hooksPath，也可以把它复制到 .git/hooks/commit-msg 并加执行位。
+#
+# ⚠ 从 Windows 提交时要额外做一次（否则 Linux/macOS 上 git 会因为
+#   文件模式是 100644 而没有权限执行它，hook 在别人的机器上静默失效）：
+#     git update-index --chmod=+x .githooks/commit-msg
+#
+# 为什么用 /bin/sh 而不是 bash：Git for Windows 用它自带的 busybox/minwgw sh
+#   执行 hook，Linux runner 用 dash/bash。只依赖 POSIX 才能两边同一条命令。
+#
+# 逃生口：git commit --no-verify 会跳过所有 hook。这是留给紧急回滚用的，
+#   不是常态；CI 的 unit job 不看提交信息，所以这里拦不住坏代码，只拦坏描述。
+
+MSG_FILE="$1"
+
+# 拿不到参数或文件不存在（例如 git commit --amend 的某些内部调用）就放行，
+# 校验器不该成为提交路径上的新故障点
+if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
+    exit 0
+fi
+
+# 取第一个非注释、非空行作为标题。
+# 为什么自己再剥一遍 '#'：git 传给本 hook 的内容在不同版本/参数下未必已清洗，
+# 模板里的说明文字一旦被当成标题，报错信息会指向 70 行模板，完全没有可读性
+SUBJECT=$(tr -d '\r' <"$MSG_FILE" | grep -v '^#' | grep -v '^[[:space:]]*$' | head -n 1)
+
+if [ -z "$SUBJECT" ]; then
+    echo "commit-msg: 提交信息是空的。" >&2
+    echo "  至少写一行：type(scope): 说清做了什么，例如 docs(hook): 增加 commit-msg 格式校验" >&2
+    exit 1
+fi
+
+# git 自己生成的、以及交互式变强的消息，格式不由人控制，直接放行
+case "$SUBJECT" in
+    "Merge "* | "Revert "* | "fixup! "* | "squash! "* | "amend! "* | "Initial commit")
+        exit 0
+        ;;
+esac
+
+TYPES='feat|fix|refactor|perf|test|docs|build|ci|chore|style|revert'
+SCOPES='goods|order|user|auth|comment|collect|report|notice|category|stats|file|log|redis|mq|db|config|web|deps|docker|hook|security|upload'
+
+if ! printf '%s' "$SUBJECT" | grep -Eq "^($TYPES)(\(($SCOPES)\))?!?: [^[:space:]]"; then
+    echo "commit-msg: 标题不符合约定格式。" >&2
+    echo "  收到：$SUBJECT" >&2
+    echo "  要求：type(scope): 内容     scope 可省略，破坏性改动在冒号前加 !" >&2
+    echo "  type：$TYPES" >&2
+    echo "  例子：fix(order): 超时取消前先确认已扣库存，避免重复退款" >&2
+    echo "        build(deps): 引入 flyway-mysql，否则启动报 Unsupported Database: MySQL 8.0" >&2
+    echo "  完整说明见 .gitmessage；确需跳过：git commit --no-verify" >&2
+    exit 1
+fi
+
+# 结尾标点：标题是一句陈述，不是一句话。中文句号尤其容易顺手带上。
+# 这里刻意用 case 的后缀匹配，而不是 grep 的字符类：sh 一般以 C locale 运行，
+# `[。；：]` 会被拆成**字节集合**，而汉字的第三个字节常常落在 0x80~0xBF 里 ——
+# 于是「…修复问题」这种正常标题可能被当成「以分号结尾」而误拦。
+# case 的多字节字面量是整串按字节比较，不拆集合，没有这个坑
+case "$SUBJECT" in
+    *'.' | *'!' | *'?' | *'。' | *'！' | *'？' | *'，' | *'、' | *'；' | *'：')
+        echo "commit-msg: 标题结尾不要加标点（含中文句号/顿号）。" >&2
+        echo "  收到：$SUBJECT" >&2
+        exit 1
+        ;;
+esac
+
+# 「优化」「修改」这类词单独成句时等于没写。只在整条主题就是这一个词时才拦，
+# 否则 "fix(goods): 优化搜索的 LIKE 前缀匹配" 这种正常描述会被误杀
+BODY=$(printf '%s' "$SUBJECT" | sed 's/^[^:]*: *//')
+BODY_LOWER=$(printf '%s' "$BODY" | tr 'A-Z' 'a-z')
+case "$BODY_LOWER" in
+    修改 | 优化 | 完善 | 更新 | 修复 | 提交 | 代码 | 测试 | 临时 | 一些改动 | bug | fix | update | test | init | wip | misc | stuff | changes)
+        echo "commit-msg: 描述太笼统，看不出这次改了什么。" >&2
+        echo "  收到：$SUBJECT" >&2
+        echo "  换成：改了什么对象 + 造成了什么结果（git diff 说得清「改了哪个文件」，说不清「为什么」）" >&2
+        exit 1
+        ;;
+esac
+
+# 长度只警告不失败：中文一个字 3 字节，硬卡字节数会把合理的中文标题逼成缩写。
+# 72 字节 ≈ 24 个汉字，超出时提示改成「标题短、正文补细节」
+BYTES=$(printf '%s' "$SUBJECT" | wc -c)
+if [ "$BYTES" -gt 72 ]; then
+    echo "commit-msg: 提示——标题 $BYTES 字节（约 72 字节/24 汉字较合适），细节请挪到正文。" >&2
+    echo "  $SUBJECT" >&2
+fi
+
+exit 0

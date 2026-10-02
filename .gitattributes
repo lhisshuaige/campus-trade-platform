@@ -1,0 +1,44 @@
+# =============================================================================
+# 行尾与文本属性
+#
+# 为什么这个文件必须存在（不是风格问题，是**能不能跑**的问题）：
+# 本仓库在 Windows 上开发，作者的 git 全局配置是 core.autocrlf=true（实测），
+# 也就是说 checkout 时 git 会把仓库里的 LF **替换成 CRLF** 写进工作区。
+# 对 .java 无所谓，对这两个文件是致命的：
+#   · mvnw            —— 它是 /bin/sh 脚本，多一个 \r 就是
+#                        `bad interpreter: /usr/bin/env sh\r` 或 `command not found`
+#   · .githooks/commit-msg —— 同理，而且报错发生在别人 commit 的时候，
+#                        看起来像「hook 坏了」，实际是行尾坏了
+#
+# 实测记录：加这个文件之前，`git ls-files --eol` 显示 136 个入库文件在索引里
+# **全部已经是 i/lf**，只有工作区有 46 个是 CRLF。所以 `* text=auto` 不会引起
+# 一次「全仓库重规范化」的巨大 diff —— 这点很重要，很多项目是被这一步吓退的。
+# =============================================================================
+
+* text=auto
+
+# 必须在任何平台都保持 LF 的东西
+*.sh    text eol=lf
+mvnw    text eol=lf
+.githooks/commit-msg text eol=lf
+
+# Windows 批处理反过来：CRLF 才安全（cmd.exe 对 LF 的处理有历史坑）
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# 二进制：禁止任何行尾/编码转换，也禁止 git 尝试当文本做 diff
+*.jar   binary
+*.war   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+
+# 差异化显示（装了 highlight/syntax driver 才有增强，没装就是普通文本，不会报错）
+*.java text
+*.xml  text
+*.yaml text
+*.sql  text
+*.md   text
