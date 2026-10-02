@@ -4,8 +4,11 @@ pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
 release.properties
-# maven wrapper 需要保留（供他人 clone 后直接运行）
+# maven wrapper：本工程用的是 distributionType=only-script（见 .mvn/wrapper/maven-wrapper.properties），
+# 这种形态**只有 mvnw / mvnw.cmd 两个脚本、没有 maven-wrapper.jar**，
+# 所以下面这条否定规则当前无对象可放行，留着只是为了将来切回 script+jar 形态时脚本不被 *.jar 误吞
 !.mvn/wrapper/maven-wrapper.jar
+# wrapper 下载的 Maven 发行版在 ~/.m2/wrapper，不在仓库内；这里无需额外条目
 
 # ================= Java 编译产物 =================
 *.class
@@ -41,3 +44,12 @@ desktop.ini
 
 # ================= 本地私有配置（含真实密码，禁止提交） =================
 src/main/resources/application-local.yaml
+src/main/resources/application-local.yml
+# 例外：.example 是**脱敏模板**，必须提交，新人 clone 后复制成上面两个文件之一才能跑
+!src/main/resources/application-local.yaml.example
+
+# ================= 运行时产物 =================
+# Flyway 迁移由应用执行，不产生本地文件；但下面这些是真实会落盘的
+.mvn/wrapper/maven-wrapper.jar
+uploads/
+*.pid
