@@ -1,0 +1,51 @@
+# =============================================================================
+# 构建上下文排除清单（Dockerfile 的 COPY 看不到这里的东西）
+#
+# 为什么不能省这个文件：COPY src src 之前会先跑一次 dependency:go-offline，
+# 上下文里每多一个字节都要走一遍 docker 的打包与传输。而这个仓库恰好有两样
+# 大而无用的东西：target/（一次 mvn package 就 40MB+）和 logs/（今天已经 16KB，
+# 生产上会到 GB 级）。带上它们不只是慢 ——
+# target/classes 会被 COPY 进构建阶段，下一次 mvnw package 看到的是
+# 「已经有一份 class 文件」的源码树，出问题极难归因。
+# =============================================================================
+
+# 构建产物
+target/
+*.jar
+*.war
+
+# 运行期产生的日志（logback 的 LOG_DIR 默认是 logs/）
+logs/
+
+# 本地私有配置 —— **绝对不允许进入镜像层**：
+# 它含真实数据库密码，而 docker history 能看到每一层 COPY 的内容。
+# 这里连 .example 也排掉，是因为镜像用 SPRING_PROFILES_ACTIVE=prod，
+# 里面那个 local 的默认值（作者开发机的局域网 IP）会成为一个误导源
+src/main/resources/application-local.yaml
+src/main/resources/application-local.yml
+src/main/resources/application-local.yaml.example
+
+# 版本控制与 CI（不参与镜像构建）
+.git/
+.gitignore
+.gitmessage
+.githooks/
+.github/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 文档与本项目自带的说明（镜像里不需要）
+*.md
+!README.md
+
+# 编排与 CI 自己
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# 本地环境变量文件：值只应在**运行时**通过 -e / env_file 注入，
+# COPY 进镜像等于把密码烧进层里，删都删不掉（要删只能重建镜像）
+.env

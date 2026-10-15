@@ -1,7 +1,7 @@
 package com.campus.trade.bean.exception;
 
 
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.result.MyResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;

@@ -27,7 +27,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     /**
-     * 密码编码器交给容器（P2-10）。原来是在 {@code UserServiceImp} 里 {@code new BCryptPasswordEncoder()}：
+     * 密码编码器交给容器（P2-10）。原来是在 {@code UserServiceImpl} 里 {@code new BCryptPasswordEncoder()}：
      * 那样“本站用什么强度加密”就在两处各说各话 —— Security 里那套配置和那个实例没有任何关系，
      * 将来要调 cost factor 或换 Argon2，得先记起“还有第二个实例存在”。
      */

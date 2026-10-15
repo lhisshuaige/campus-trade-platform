@@ -45,6 +45,48 @@ public class RedisCircuitBreaker {
         return shouldSkip();
     }
 
+    /**
+     * 三态快照，只给 actuator 的健康指示器读（P3-17）。
+     * <p>
+     * 为什么要把这个类自己的判断读出来，而不是让健康检查直接 {@code ping} 一次 Redis：
+     * {@code ping} 只回答「此刻网络层通不通」，而本应用的行为是由**这个熔断器的判定**决定的——
+     * 开路期间缓存直接回源、下单直接 503，哪怕 Redis 其实已经恢复了。两者不一致时，
+     * 运维会看见「健康检查绿着，用户却下不了单」，而这两种状态在同一个进程里同时存在是正常现象
+     * （开路窗口最长 30s）。所以这里报的是**应用视角的 Redis**。
+     */
+    public State state() {
+        long until = openUntilMillis.get();
+        if (until > System.currentTimeMillis()) {
+            return State.OPEN;
+        }
+        // 窗口已过但失败计数没被成功清掉 = 半开：下一个真请求会替全体去试探。
+        // recordSuccess() 会把 openUntilMillis 置 0，所以「曾经开路、现在已恢复」不会误判到这里
+        if (until > 0L || consecutiveFailures.get() >= FAILURE_THRESHOLD) {
+            return State.HALF_OPEN;
+        }
+        return State.CLOSED;
+    }
+
+    /** 当前连续失败次数（只读快照，不参与判定） */
+    public int consecutiveFailures() {
+        return consecutiveFailures.get();
+    }
+
+    /** 开路窗口剩余毫秒；CLOSED/HALF_OPEN 下为 0 */
+    public long openRemainingMillis() {
+        return Math.max(0L, openUntilMillis.get() - System.currentTimeMillis());
+    }
+
+    /** 当前开路窗口长度（退避后的值，不是初始值） */
+    public long currentOpenWindowMillis() {
+        return openMillis.get();
+    }
+
+    /** 与类注释里的语义一一对应：闭合=正常发命令，开路=直接降级，半开=放行试探 */
+    public enum State {
+        CLOSED, OPEN, HALF_OPEN
+    }
+
     public void recordSuccess() {
         if (consecutiveFailures.get() == 0 && openUntilMillis.get() == 0) {
             return;   // 稳态零开销

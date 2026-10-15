@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  logback-spring.xml（P3-17）
+
+  为什么文件名必须带 -spring：只有 logback-spring.xml 才会被 Spring Boot 以
+  「带 <springProfile>/<springProperty> 扩展」的方式解析。叫 logback.xml 时
+  这两个标签会被 logback 自己当成未知元素**静默忽略** —— 结果不是报错，
+  而是「prod 段根本没生效」，日志级别在生产上停在 dev 的 DEBUG。这是本文件最难查的一种坏法。
+
+  三件事各自解决什么：
+    1) 文件 + 按天/按大小滚动：出问题时要能翻到当时的日志。stdout 采集归采集，
+       「本地跑一天、崩在第 3 小时」这种场景，没有文件就什么都没有了。
+    2) ASYNC_FILE：写盘抖动（NFS、磁盘满、杀毒软件扫描）不能把业务线程堵住。
+       neverBlock=true 的代价是**队列满时丢日志** —— 这个取舍是有意识的：
+       宁可丢几条 INFO，也不能让一次磁盘卡顿把下单接口拖成 3 秒。
+       所以 ERROR 单独走一条**同步**的 appender（ERROR_FILE），
+       保证「最不该丢的那部分」不经过队列。
+    3) <springProfile> 分环境级别：dev 要看见 SQL 与业务 DEBUG，
+       prod 只要 WARN 以上的框架噪音 + 自己应用的 INFO。
+
+  ⚠ 一条与 MyBatis 有关的坑，写在这里因为它容易被误认为生效了：
+    application.yaml 里的 mybatis-plus.configuration.log-impl: StdOutImpl
+    走的是 System.out，**不经过 logback** —— 所以这里的 level 配置管不到它，
+    它也不会被 rolling file 之外的任何 appender 之外的机制约束。
+    生产要用 application-prod.yaml 里的 NoLoggingImpl（那份文件已经这么写了），
+    否则「一条完整 SQL + 每个参数」会直接打到容器 stdout，而里面的手机号、
+    token 这类值不会因为你配了 logback 就消失。
+  ============================================================================
+-->
+<configuration>
+
+    <!-- Boot 的 defaults.xml：提供 CONSOLE_LOG_PATTERN、%clr 转换器与各包的默认级别 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="CampusTrade"/>
+    <!-- 日志目录可由环境变量/启动参数挪走（容器里通常挂 emptyDir 或宿主目录）。
+         留默认值 logs/ 而不是 .：不污染仓库根目录，且 .gitignore 已经有 logs/ -->
+    <springProperty scope="context" name="LOG_DIR" source="app.logging.dir" defaultValue="logs"/>
+
+    <!-- 文件里不用 %clr：颜色转义序列会原样写进文件，翻历史时满屏的 ANSI 转义符比没日志更难读 -->
+    <property name="FILE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"/>
+    <!-- ERROR 单独一份时把调用位置带上：异常发生在哪一行是翻日志时唯一想知道的事。
+         %L/%M 需要抓栈帧、有实打实的开销，所以只在 error 这条路上付这个钱 -->
+    <property name="ERROR_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} [%file:%line] - %msg%n"/>
+
+    <!-- =============== 控制台（容器里这就是主日志通道）=============== -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- =============== 全量文件：按天 + 按 50MB 滚动，gzip 压缩归档 =============== -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${APP_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- %d 是滚动周期、%i 是「同一天内因为超过 maxFileSize 而分的第几份」。
+                 少了 %i，一天内写超 50MB 时 logback 会把两份往同一个文件名上压，等于白滚 -->
+            <fileNamePattern>${LOG_DIR}/archived/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <!-- totalSizeCap 是最后一道闸：maxHistory 只按时间删，一次异常刷屏能在一天里
+                 塞满几十个 50MB 分片，按时间要等 14 天才删，磁盘先没。两个必须同时给 -->
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>4096</queueSize>
+        <!-- discardingThreshold=0：队列满时不按级别丢弃（要丢就一律丢，见 neverBlock），
+             而不是「只丢 INFO/DEBUG」—— 否则故障高峰期先消失的恰好是排查需要的上下文 -->
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>true</neverBlock>
+        <!-- includeCallerData=false 是默认值，这里写出来是因为它是上面 %line 的前提：
+             异步不带上调用栈，FILE 里的 %L/%M/%file 全会是 "?" -->
+        <appender-ref ref="FILE"/>
+    </appender>
+
+    <!-- =============== ERROR 单独一份，同步写，不过队列 =============== -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${APP_NAME}-error.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/archived/${APP_NAME}-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <!-- 排障时最先打开的就是这个文件，30 天的回溯比全量那份 14 天更值钱 -->
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>512MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${ERROR_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ==================== 本地 / 默认（含 local profile）==================== -->
+    <springProfile name="!prod">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
+        </root>
+        <!-- 自己的包开 DEBUG：P0~P3 那些降级分支（熔断开路、锁抢占失败、缓存回源）
+             都只在本机才需要亲眼看见，而在生产开它们等于把入参打进日志 -->
+        <logger name="com.campus.trade" level="DEBUG"/>
+        <!-- 框架的启动期 INFO 在本地已经是噪音（MP、lettuce、spring 各刷几十行），
+             但 WARN 以上要留着，连接池耗尽的第一现场就在这些 logger 里 -->
+        <logger name="org.springframework" level="WARN"/>
+        <logger name="com.baomidou.mybatisplus" level="WARN"/>
+        <logger name="io.lettuce" level="WARN"/>
+        <logger name="org.redisson" level="WARN"/>
+        <logger name="org.apache.ibatis" level="WARN"/>
+        <logger name="com.zaxxer.hikari" level="WARN"/>
+    </springProfile>
+
+    <!-- ============================ 生产 ============================ -->
+    <springProfile name="prod">
+        <root level="INFO">
+            <!-- 容器里 stdout 是唯一保证被采集到的通道（json-file / fluentd 都从它取）。
+                 文件那份同时留着：本项目还没假定一定有日志平台 -->
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
+        </root>
+        <logger name="com.campus.trade" level="INFO"/>
+        <logger name="org.springframework" level="WARN"/>
+        <logger name="com.baomidou.mybatisplus" level="WARN"/>
+        <logger name="io.lettuce" level="WARN"/>
+        <logger name="org.redisson" level="WARN"/>
+        <logger name="org.apache.ibatis" level="WARN"/>
+        <logger name="com.zaxxer.hikari" level="WARN"/>
+        <!-- MQ 重连与 Flyway 各自的噪音级别：
+             spring.amqp 在 broker 不可用时会按秒刷 ERROR（本项目把 MQ 当软依赖，这是预期行为），
+             但一次真实的死信投递必须留下 —— 所以停在 ERROR 而不是往上抬到 OFF；
+             flyway 每次启动打一遍「Schema is up to date」，只在第一次部署那台机器上有用 -->
+        <logger name="org.springframework.amqp" level="ERROR"/>
+        <logger name="org.flywaydb" level="WARN"/>
+    </springProfile>
+
+    <!--
+      没做的事，以及为什么：
+        · 没加 MDC requestId / %X{traceId}。要让它有意义，得同时给 LogAspect 加一个
+          「请求进来时生成、写进 oper_log 表」的字段，否则应用日志里有 requestId、
+          后台审计里查不到同一个 requestId，两边对不上，等于白加一层格式。
+          当前定位靠 oper_log 的 (request_uri, create_time, cost_ms) 已经够用。
+        · 没上 JSON encoder（logstash-logback-encoder）。它是一个额外的外部依赖，
+          而现在没有任何采集端要求 JSON；等接了 Loki/ES 再加，改这一个 encoder 即可。
+    -->
+</configuration>

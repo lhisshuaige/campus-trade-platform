@@ -30,14 +30,16 @@ app:
     # 探测失败直接拒绝启动，好过起来一个没人能登录的站（P0-2 里说的「问题在部署期暴露」）
     required: true
   search:
-    # 生产保持全文搜索（默认 true），但**部署清单里多一项**：目标库必须先跑过
-    # init.sql 末尾【存量库增量升级 · P3】那段 DDL（建 ft_goods_title），否则搜索接口 500。
-    # 这里的 true 不是「一个可以后改的偏好」，它是「库与代码必须同版本」这个约束的一个具体出口：
-    # 没有 Flyway 把 DDL 管起来（P3-15）之前，这类隐式前置只能靠部署清单本身列出来
+    # 生产保持全文搜索（默认 true），但**部署清单里仍有一项**：目标库必须有 goods.ft_goods_title。
+    # P3-15 之后这一项不再靠人记忆：启动时 Flyway 自动跑 V2（它带存在性判断，已建则跳过、
+    # 未建则建，ngram_token_size 不是 2 时直接让迁移失败而不是留下一个搜不到词的索引）。
+    # 这里的 true 仍然不是「一个可以后改的偏好」，它是「库与代码必须同版本」这个约束的一个具体出口，
+    # 只是出口从部署清单换成了迁移脚本
     fulltext-enabled: ${APP_SEARCH_FULLTEXT:true}
 
 upload:
   # 生产是反代/对象存储部署，必须给出对外地址；代码不回退去读 X-Forwarded-Host（理由见 FileController）
+  # 只填协议+主机（如 http://your-domain），图片路径固定拼 /upload/**（见 WebMvcConfig 资源映射）
   base-url: ${UPLOAD_BASE_URL:}
   path: ${UPLOAD_PATH:/data/campus-trade/upload/}
   # 比开发环境收紧：够正常用户发商品，挡的是脚本刷盘（本地磁盘是唯一没有备份、也上不了水平扩展的组件）

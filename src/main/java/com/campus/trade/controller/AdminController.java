@@ -1,18 +1,18 @@
 package com.campus.trade.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.campus.trade.bean.entry.Role;
-import com.campus.trade.bean.entry.User;
+import com.campus.trade.bean.entity.Role;
+import com.campus.trade.bean.entity.User;
 import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.utils.RequireRole;
-import com.campus.trade.bean.DTO.request.comment.CommentAdminQueryDTO;
-import com.campus.trade.bean.DTO.request.goods.GoodsAdminQueryDTO;
-import com.campus.trade.bean.DTO.request.log.OperLogQueryDTO;
-import com.campus.trade.bean.DTO.request.order.OrderAdminQueryDTO;
-import com.campus.trade.bean.DTO.request.report.ReportAdminQueryDTO;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.request.comment.CommentAdminQueryDTO;
+import com.campus.trade.bean.dto.request.goods.GoodsAdminQueryDTO;
+import com.campus.trade.bean.dto.request.log.OperLogQueryDTO;
+import com.campus.trade.bean.dto.request.order.OrderAdminQueryDTO;
+import com.campus.trade.bean.dto.request.report.ReportAdminQueryDTO;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.vo.CommentAdminVo;
 import com.campus.trade.bean.vo.GoodsVo;
 import com.campus.trade.bean.vo.OperLogVo;

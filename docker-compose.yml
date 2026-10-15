@@ -1,0 +1,147 @@
+# =============================================================================
+# CampusTrade 本地/演示编排
+#
+# 这是**开发栈**，不是生产拓扑：单实例、密码写在文件里、端口都映射到宿主。
+# 它的主要作用是让「README 里那条快速开始」变成一条命令，而不是让新人去猜
+# MySQL 的 ngram 参数默认是几。
+#
+# 不写 version: —— Compose v2 已经废弃这个键，写了只会得到一条 warning。
+#
+# ⚠ 三条与本项目强绑定的原因，去掉任何一条都会得到一个「能起来但行为不对」的环境：
+#   1) mysql 的 --ngram_token_size=2：P3-2 的中文双字搜索依赖它，而 MySQL 默认是 6。
+#      更坑的是它**在建索引那一刻固化**：先建了索引再改参数不会有任何提示，
+#      只是搜索永远返回空。所以这个值必须在容器第一次启动时就对。
+#   2) app 依赖三个中间件用 condition: service_healthy 而不是裸 depends_on：
+#      裸 depends_on 只等「容器启动了」，不等「能连了」。而 prod 里
+#      app.redis.required=true 会让 Redis 未就绪时应用直接拒绝启动 ——
+#      没有健康条件时这就是一个随机失败的 compose up（有时能起、有时不能）。
+#   3) uploads 具名卷：prod 的 upload.path=/data/campus-trade/upload/。
+#      不挂卷的话 docker compose down 一次，所有商品图片文件就没了 ——
+#      而数据库里 goods.image 的 URL 还在，症状是「图片全 404」，看不出原因。
+# =============================================================================
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: campus-mysql
+    restart: unless-stopped
+    # --default-time-zone=+08:00 与 app 容器的 TZ 保持一致：DATETIME DEFAULT CURRENT_TIMESTAMP
+    # 是**服务端**时间，两边时区不一致时，订单超时扫描（按 create_time 判断）会整体偏移 8 小时
+    command:
+      - --ngram_token_size=2
+      - --default-time-zone=+08:00
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      # 只有 InnoDB 支持 FULLTEXT + ngram；MyISAM 会静默忽略 WITH PARSER ngram
+      - --default-storage-engine=InnoDB
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-campus_dev_pwd}
+      # 建库这一步由镜像完成（对应 db/init.sql 那唯一一条 CREATE DATABASE），
+      # Flyway 只能连一个已存在的库，它不建库
+      MYSQL_DATABASE: campus_trade
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # CMD-SHELL 而不是 CMD：需要让容器内的 shell 展开 $$MYSQL_ROOT_PASSWORD。
+      # $$ 是 compose 的转义 —— 单个 $ 会在 compose 层就被替换掉，到不了容器
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      # MySQL 8 首次初始化要建系统表，冷启动 30s 内不通是正常现象；
+      # 窗口太短会让 app 一直卡在 depends_on 上，看起来像 compose 挂了
+      start_period: 40s
+      retries: 6
+
+  redis:
+    image: redis:7-alpine
+    container_name: campus-redis
+    restart: unless-stopped
+    # 演示栈默认不设密码：应用侧 spring.data.redis.password 留空即可（见 .env）。
+    # 端口刻意不往外映射到 0.0.0.0 —— 无密码的 Redis 暴露到局域网等于把
+    # 「任意写 key」交给同网段的任何设备，而本项目的 token 黑名单与限流计数都在这些 key 上
+    command: ["redis-server", "--appendonly", "yes", "--save", ""]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: campus-rabbit
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "127.0.0.1:5672:5672"
+      # 管理台只绑本机：15672 上是「删队列、清消息」级别的权限
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbit-data:/var/lib/rabbitmq
+    healthcheck:
+      # 用 rabbitmq-diagnostics 而不是 tcp 探测：TCP 通但 vhost/用户还没就绪时，
+      # 应用的队列声明会失败，而 Spring AMQP 会把它变成后台无限重连（不是启动失败）
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      start_period: 40s
+      retries: 6
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: campus-trade
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 应用与中间件在同一个 compose 网络里，服务名就是主机名（不是 localhost）
+      DB_URL: jdbc:mysql://mysql:3306/campus_trade?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&allowMultiQueries=true
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD:-campus_dev_pwd}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      # 必须有值且 >= 256 bit，否则第一次签发 token 就抛 WeakKeyException
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必填，生成：openssl rand -base64 48}
+      UPLOAD_PATH: /data/campus-trade/upload/
+      # compose 部署没有反代，图片地址从请求自身推断即可；
+      # 前面套了 nginx 就必须给它真实域名，否则存进 goods.image 的是内部地址
+      UPLOAD_BASE_URL: ${UPLOAD_BASE_URL:-}
+      APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:*,http://127.0.0.1:*}
+      TZ: Asia/Shanghai
+      # 把 logback 的 LOG_DIR 指到容器里挂出来的卷，否则容器一销毁日志一起没
+      LOG_DIR: /app/logs
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads:/data/campus-trade/upload
+      - app-logs:/app/logs
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbit-data:
+  # 这两条不是可选的：见文件头第 3 条
+  uploads:
+  app-logs:

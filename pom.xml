@@ -57,6 +57,24 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
+
+        <!-- Flyway（P3-15）：把「库必须和代码同版本」这件事从部署清单搬进构建产物。
+             版本不写在这里 —— 由 spring-boot-starter-parent 3.1.5 管理（实测解析为 9.16.3），
+             跟着 Boot 走能避免「core 与 Boot 自动配置类不兼容」这一类最难查的启动失败。
+             ⚠ flyway-mysql 不是可选项，也不是「升到 Flyway 10 才需要」：
+             只加 core 时应用启动直接失败在 flywayInitializer 上，报
+             「Unsupported Database: MySQL 8.0」（本仓库就是这么实测出来的）——
+             9.x 已经把 MySQL 方言拆成了独立模块，而这条信息只在**运行时**出现，
+             编译与 mvn test（不启容器的那批）都拦不住它，所以两个必须一起声明。
+             两个 artifact 都不写 version：同受 Boot BOM 管理，手写版本只会与 core 漂开 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -82,10 +100,29 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- 私信实时推送：原生 WebSocket（/ws/chat），不用 STOMP——
+             协议只有下行 message/pong 两种，裸 Handler + JSON 足够 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
         <!-- AOP 切面依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
+        <!-- Actuator（P3-17）：健康探针 /actuator/health/{liveness,readiness}。
+             ⚠ 两个必须配套才能生效的坑，单独改任何一个都是「看起来配好了」：
+               1) JwtInterceptor 拦的是 /**，不把 /actuator/** 排除掉，探针永远拿 401，
+                  而编排器把 401 当成「不健康」→ 无限重启容器（已在 WebMvcConfig 里排除）；
+               2) SecurityConfig 若启用了 httpBasic/全路径鉴权，同样会把探针挡在门外。
+             只暴露 health/info 两个 endpoint：metrics/env 里能读到配置项（包括密码变量名），
+             而本项目现在没有任何消费方需要它们 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
         <!-- Redis 缓存依赖 -->
@@ -190,11 +227,104 @@
                                     <version>${lombok.version}</version>
                                 </path>
                             </annotationProcessorPaths>
+                            <!-- L3 集成测试（文件名以 IT 结尾）默认**不编译也不跑**，用 -Pl3 打开。
+                                 为什么默认要排掉：它们依赖 Testcontainers，而 Testcontainers 需要
+                                 Docker daemon —— 本机没 Docker 时，连「依赖能不能解析」都是白问，
+                                 更麻烦的是它会把一个环境缺失伪装成测试失败。
+                                 默认构建那 49 条断言的价值恰恰是「任何机器都能给答案」 -->
+                            <testExcludes>
+                                <testExclude>**/*IT.java</testExclude>
+                            </testExcludes>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- =====================================================================
+             l3：把需要真实 MySQL 的集成测试放进来。开启方式 ./mvnw -B -Pl3 test
+
+             为什么不直接把依赖加在 <dependencies> 里：
+               1) 默认构建（包括 CI 的 unit job）不碰它，就不会引入
+                  「拉一个 mysql 镜像」这个隐性前置，也不会多一段下载时间；
+               2) Testcontainers 的失败形态是「环境缺失」而不是「断言不对」，
+                  这种东西混在默认构建里只会被当成又一条坏测试忽略掉。
+
+             版本都不写：Boot 3.1.5 的 BOM 已经 import 了
+             org.testcontainers:testcontainers-bom（实测 1.18.3），
+             手写版本只会与它漂开。
+
+             ⚠ 本机实测到的是：-Pl3 下 test-compile 能过（依赖能解析、代码能编译）；
+               **没有真正跑过**（本机未安装 Docker）。GitHub Actions 的 ubuntu runner
+               带 Docker，所以这个 profile 在 CI 上是会真的执行的。
+             ===================================================================== -->
+        <profile>
+            <id>l3</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.testcontainers</groupId>
+                    <artifactId>junit-jupiter</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.testcontainers</groupId>
+                    <artifactId>mysql</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <!-- MySQLContainer 拉起容器后需要一个能连上去的驱动；主依赖里那个的 scope 是 runtime，
+                     虽然也能上测试类路径，但在 profile 里显式写一次比「靠作用域推导」可读 -->
+                <dependency>
+                    <groupId>com.mysql</groupId>
+                    <artifactId>mysql-connector-j</artifactId>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>default-testCompile</id>
+                                <phase>test-compile</phase>
+                                <goals>
+                                    <goal>testCompile</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- combine.self=override 把一个空的 testExcludes 盖到基础配置上，
+                                         等于「本 profile 不排任何东西」；不写这一句就会继承上面的排除，
+                                         得到一个能下载依赖但永远不编译 IT 的迷惑 profile -->
+                                    <testExcludes combine.self="override"/>
+                                    <annotationProcessorPaths>
+                                        <path>
+                                            <groupId>org.projectlombok</groupId>
+                                            <artifactId>lombok</artifactId>
+                                            <version>${lombok.version}</version>
+                                        </path>
+                                    </annotationProcessorPaths>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <!-- surefire 默认只认 Test*/*Test/*Tests/*TestCase，*IT 属于 failsafe 的约定。
+                                 这个项目不引入 failsafe（没有 invoker 阶段需求），所以把 IT 加进 includes，
+                                 同时保留 *Test —— 否则 -Pl3 会变成一个「只跑集成测试」的隐藏开关 -->
+                            <includes>
+                                <include>**/*Test.java</include>
+                                <include>**/*IT.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

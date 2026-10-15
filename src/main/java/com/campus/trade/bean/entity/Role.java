@@ -1,4 +1,4 @@
-package com.campus.trade.bean.entry;
+package com.campus.trade.bean.entity;
 
 public enum Role {
 

@@ -2,7 +2,7 @@ package com.campus.trade.controller;
 
 import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.exception.ErrorCode;
-import com.campus.trade.bean.DTO.result.MyResult;
+import com.campus.trade.bean.dto.result.MyResult;
 import com.campus.trade.bean.utils.ImageContentUtils;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.bean.utils.RateLimit;

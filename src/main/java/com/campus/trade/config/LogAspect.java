@@ -1,7 +1,7 @@
 package com.campus.trade.config;
 
 import cn.hutool.json.JSONUtil;
-import com.campus.trade.bean.entry.OperLog;
+import com.campus.trade.bean.entity.OperLog;
 import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.utils.Log;
 import com.campus.trade.service.OperLogService;

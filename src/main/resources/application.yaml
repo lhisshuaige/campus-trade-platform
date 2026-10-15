@@ -1,6 +1,52 @@
 server:
   port: 8080
 
+# ============================================================================
+# 健康探针（P3-17）。分组的唯一依据是「探针失败后编排器该做什么」：
+#   liveness 失败 = 这个进程救不回来，杀掉重启；
+#   readiness 失败 = 先别给这个实例接流量，等它自己恢复。
+# 所以 Redis/MQ 这类**可自愈**的降级只能进 readiness：Redis 抖一下时把实例重启，
+# 重启后的应用会去重新建连、重新拉缓存，一群同时重启的实例正好把 Redis 打成惊群 ——
+# 把一个能降级的故障做成了雪崩。而 liveness 只留进程自身的两个状态，
+# 它们失败的成因确实只有「这个 JVM 不行了」。
+#
+# ⚠ 探针路径必须同时从 JwtInterceptor 和 Security 两条路上放行，少一条都是 401：
+#   WebMvcConfig 里已经 exclude("/actuator/**")；SecurityConfig 现在是 anyRequest().permitAll()，
+#   将来谁把鉴权收进 Security 链，记得在这里加 permitAll，否则症状是「容器反复重启」而不是「探针不通」。
+# ============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        # 只给 health/info。metrics/env/configprops 能读到配置项名与运行时指标，
+        # 而本站现在没有任何消费方需要它们：暴露面少一个就少一个
+        include: health,info
+  info:
+    env:
+      # 关掉 /actuator/info 对环境变量的回显（它能把 DB_PASSWORD 的**变量名**与默认值列出来）
+      enabled: false
+  endpoint:
+    health:
+      # never：现在 Security 是全放行，「仅鉴权后可见」等于「永远不可见」，写 when_authorized 是一个谎言。
+      # 本地排查想要明细时用命令行覆盖，不改仓库里的值：
+      #   --management.endpoint.health.show-details=always
+      show-details: never
+      show-components: never
+      probes:
+        # 打开 /actuator/health/liveness 与 /readiness 两个路径（K8s 标准探针端点）
+        enabled: true
+      group:
+        liveness:
+          # 只有这两个：不连 DB、不连 Redis、不看磁盘
+          include: livenessState,ping
+        readiness:
+          # db：连不上库等于什么都写不了；redis/redisCircuit：缓存不可用会让下单直接 503；
+          # rabbit：MQ 是软依赖（关掉消费者后还有定时任务作后备），但队列真不可用时新订单的延迟取消会失效，
+          # 这个阶段不该接流量；diskSpace：上传目录写不进去是真实故障，而且不报错、只静默失败。
+          # ⚠ 这里的每一项在本地都会把 readiness 拖成 DOWN（没起 Redis 就是 DOWN），
+          # 这是**正确行为**：本地没有编排器拿它去重启容器，只是 curl 一下会看到 down
+          include: readinessState,db,redis,redisCircuit,rabbit,diskSpace
+
 spring:
   application:
     name: CampusTrade
@@ -9,10 +55,35 @@ spring:
   profiles:
     active: local
   datasource:
-    url: jdbc:mysql://localhost:3306/campus_trade?allowMultiQueries=true&useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    # url 也走环境变量：docker-compose 里应用连的是服务名 mysql，不是 localhost，
+    # 而之前这个值被写死时，compose 里设的 DB_URL 根本不会被读到（症状是连不上 127.0.0.1:3306）。
+    # 默认值仍指向本机，不改本地开发的那条路径
+    url: ${DB_URL:jdbc:mysql://localhost:3306/campus_trade?allowMultiQueries=true&useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  # Flyway（P3-15）：迁移脚本在 src/main/resources/db/migration，init.sql 已退役为「只建库」
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # ⚠ 这两个 baseline 配置是给**存量库**用的，也是本项目最容易被误读的一对开关：
+    #   · 库里已有表、且没有 flyway_schema_history → 按 baseline-version=4 打一条基线，V1~V4 全部跳过
+    #     （这就是「我用 init.sql 建的库，不要再给我建一遍」的那个出口）
+    #   · 库是空的 → Flyway 不做 baseline，V1~V4 一口气跑完，得到一个与存量库同构的新库
+    #   两种情形共用一份配置，这是它比「手工取消注释那段 ALTER」强的全部理由。
+    # 代价也要写清楚：baseline-version=4 是对「这个库真的到 V4 了」的**信任声明**。
+    # 一个缺 oper_log 的老库会被基线跳过、表永远不会被建出来，症状是运行时 500 而不是启动失败。
+    # 不信任存量库时的做法：把下面 baseline-on-migrate 改成 false（或 baseline-version 改成 0）跑一次，
+    # V1 带 CREATE TABLE IF NOT EXISTS，会跳过已有表、补出缺失表，然后立刻改回来
+    baseline-on-migrate: true
+    baseline-version: 4
+    baseline-description: 该库在引入 Flyway 之前由 db/init.sql 手工建立，V1~V4 视为已应用
+    # 已应用的迁移脚本被改动就直接失败，不静默接受。开发时手改过 V1 又忘了，
+    # 靠这一条才能在下一次部署前发现，而不是等到两个环境的库行为不一致
+    validate-on-migrate: true
+    # 关掉 clean：它会 drop 库里全部对象（数据一起没）。「谁都不该在配置里把它打开」
+    # 这件事需要一条可读的记录，而不是只靠默认值恰好是 true
+    clean-disabled: true
   mvc:
     pathmatch:
       matching-strategy: ant_path_matcher
@@ -52,7 +123,7 @@ spring:
         auto-startup: ${MQ_LISTENER_AUTO_STARTUP:true}
 
 mybatis-plus:
-  type-aliases-package: com.campus.trade.bean.entry
+  type-aliases-package: com.campus.trade.bean.entity
   configuration:
     map-underscore-to-camel-case: true # 开启驼峰自动转换
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl #打印SQL
@@ -92,6 +163,11 @@ knife4j:
     language: zh_cn
 
 app:
+  logging:
+    # 日志目录（logback-spring.xml 里的 LOG_DIR 读的就是这一项）。
+    # 留这一行在仓库里而不是只靠 logback 的 defaultValue，是为了让「日志落在哪」这件事
+    # 在配置文件里能被搜到 —— 容器里把它指到挂载卷，否则实例一销毁日志一起没
+    dir: ${LOG_DIR:logs}
   cors:
     # 允许的跨域来源，逗号分隔。默认只放本机 = fail-closed：生产忘配时是「前端调不通、立刻被发现」，
     # 而不是「悄悄向全网开着」。放真实域名走这里（或环境变量），不改代码
@@ -142,10 +218,10 @@ app:
   search:
     # 商品标题搜索走 MySQL FULLTEXT(ngram) 还是 LIKE '%kw%'（P3-2）。
     # true（默认）= MATCH(title) AGAINST(... IN BOOLEAN MODE)，能走倒排索引，但硬前置是
-    # goods 上已经建上 ft_goods_title（见 init.sql 末尾【存量库增量升级 · P3】那一段）；
+    # goods 上已经建上 ft_goods_title（由 Flyway 的 V2__goods_title_fulltext.sql 负责，见上一段）；
     # 没建上不会「静默回到慢路径」，而是搜索接口直接 500（MySQL 1191）——刻意选这个方向：
     # 静默回退等于「上了全文索引」这件事永远没人发现。跑不了 DDL 的环境翻成 false 即可
-    # （两个失败方向与代价的完整推演见 GoodsServiceImp.fulltextEnabled）
+    # （两个失败方向与代价的完整推演见 GoodsServiceImpl.fulltextEnabled）
     fulltext-enabled: ${APP_SEARCH_FULLTEXT:true}
   content:
     #UGC 审核总开关：批量灌数据/演示时可临时关掉，不必为造数据先想一套“不含敏感词”的说法

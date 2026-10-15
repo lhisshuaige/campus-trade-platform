@@ -1,4 +1,4 @@
-package com.campus.trade.bean.entry;
+package com.campus.trade.bean.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;

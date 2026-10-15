@@ -36,7 +36,7 @@ public class RedisContent {
 
     // 收藏排行榜缓存 key：故意不带 limit 后缀，只存 Top50 全集，读取时在内存里截断。
     // 若做成 collect:rank:{limit} 一堆 key，收藏/上下架后无法枚举失效，只能等 TTL 自然过期；
-    // StatisticsServiceImp 的热门商品统计也复用本 key，不再另存一份（否则失效时机不一致）
+    // StatisticsServiceImpl 的热门商品统计也复用本 key，不再另存一份（否则失效时机不一致）
     public static final String Collect_Rank_KEY = "collect:rank";
 
     // 浏览量增量（尚未落库的部分）：一张 hash，field = goodsId，value = 累计 PV。
@@ -51,7 +51,7 @@ public class RedisContent {
     public static final String Rate_Limit_KEY = "rate:limit:";
 
     // 统计分析缓存 key 前缀（实际 key = 前缀 + 维度，由下面几个静态方法拼装）。
-    // 这五个字符串以前直接写在 StatisticsServiceImp 里，是项目自己定的「key 不各处拼」规范的违反项（P3-7/P3-19）。
+    // 这五个字符串以前直接写在 StatisticsServiceImpl 里，是项目自己定的「key 不各处拼」规范的违反项（P3-7/P3-19）。
     // 它们的失效时机就是「靠 TTL 自然过期」，本来不需要写侧枚举，但收在一处仍然有价值：
     // 排查时只要看这个文件就知道库里一共有哪几类 key，而不是 grep 全部 Service
     public static final String Statistics_KEY = "statistics:";

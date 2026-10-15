@@ -1,6 +1,6 @@
 package com.campus.trade.bean.utils;
 
-import com.campus.trade.bean.entry.User;
+import com.campus.trade.bean.entity.User;
 import com.campus.trade.mapper.UserMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;

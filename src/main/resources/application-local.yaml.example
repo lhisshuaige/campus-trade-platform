@@ -1,0 +1,110 @@
+# ==============================================================================
+# application-local.yaml.example —— 本地开发配置的**模板**（可提交、已脱敏）
+#
+# 用法（Windows PowerShell）：
+#   Copy-Item src/main/resources/application-local.yaml.example `
+#             src/main/resources/application-local.yaml
+# 然后把下面每一处的 <...> 换成你机器上的真值。
+#
+# 为什么要有这个文件：
+#   application-local.yaml 里全是本机真实密码，必须 gitignore（见 .gitignore 末尾），
+#   于是它成了「只有作者自己有」的文件 —— 新人 clone 下来 `mvn spring-boot:run`
+#   会在第一秒失败，而且失败信息是**下游**的（Failed to configure a DataSource /
+#   Unable to connect to Redis），不会告诉他「你缺一个文件」。主配置把 local 设成了
+#   默认激活 profile（application.yaml: profiles.active: local），缺文件不报错、
+#   只是没覆盖上，所以这个模板就是把「口口相传的那三步」变成仓库里的一个事实。
+#
+# 为什么不能干脆把密码写进 application.yaml：
+#   那等于把生产凭据的格式约定和一台开发机器的凭据绑在一起；主配置里所有敏感项都已经
+#   写成 ${ENV:默认值}，缺省是**空串**（连不上就立刻失败，不会带着错密码反复重试）。
+#
+# ⚠ 这个文件里的默认值全部是**作者开发机**的环境，不是通用可用值。下面每条都标了隐含假设。
+# ==============================================================================
+
+spring:
+  datasource:
+    # 隐含假设 1：本机（或你能连到的某台机器）有 MySQL 8，且已存在 campus_trade 库。
+    # 主配置的 url 指向 localhost:3306/campus_trade；库不存在时不会自动建，
+    # 因为 MySQL 的 JDBC 连接无法创建 database（P3-15 引入 Flyway 后仍然如此：
+    # Flyway 只跑迁移，不建库，CREATE DATABASE 不能进迁移脚本）。
+    # 用户名默认 root（application.yaml 里是 ${DB_USERNAME:root}），所以这里只补密码。
+    password: '<你的 MySQL root 密码>'
+
+  data:
+    redis:
+      # 隐含假设 2（最容易踩的一条）：主配置里 redis host 的默认值是作者局域网虚拟机 IP
+      # （application.yaml: ${REDIS_HOST:192.168.88.128}）。你本机没有这台机器，
+      # 不覆盖就会挂在「连接超时 1000ms」上，而报的是 RedisCircuitBreaker 的降级日志，
+      # 看起来像缓存逻辑出了 bug。docker 起的 Redis 就写 localhost。
+      host: localhost
+      port: 6379
+      # 隐含假设 3：没设 requirepass 就留空（写成 ''），不要删掉这一行 ——
+      # 删掉会回落到主配置默认值，而那个默认值是空串，行为相同，留着只是让「我知道它没密码」这件事可见。
+      password: '<你的 Redis 密码，无密码则留 "">'
+      # 隐含假设 4：用 database 3 而不是 0（这个值来自主配置，别在本地改成 0）——
+      # 本项目所有 key 都依赖 RedisWorker 的拼装前缀，与同一实例上别人的 db0 数据混在一起时，
+      # 一次 FLUSHDB 就会连带清掉别人的键；换库号是最便宜的隔离。
+
+  # RabbitMQ：订单超时未确认自动取消（TTL + 死信队列）
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    # 隐含假设 5：guest 只允许从 localhost 连接（RabbitMQ 默认 loopback_users 限制），
+    # 且**密码不能留空**：主配置 ${RABBITMQ_PASSWORD:} 的缺省是空串，
+    # 空串去连 guest 会拿到 ACCESS_REFUSED，而日志里那句 reconnect 会一直刷。
+    password: '<你的 MQ 密码，原生安装默认 guest>'
+    # 隐含假设 6：本机没装 MQ 时，把下面这行取消注释，消费者不启动，
+    # 订单超时改由兜底扫描（app.order-timeout.scan-interval-ms）负责，功能不退化、只是延迟变粗。
+    # 这不是「测试专用开关」：MQ 是**软依赖**，这条注释就是在说明它软在哪里。
+    # 等价的环境变量写法：MQ_LISTENER_AUTO_STARTUP=false
+    # listener:
+    #   simple:
+    #     auto-startup: false
+
+# 隐含假设 7：JWT 密钥。这条是本文件里唯一「不能随便填一个字符串」的项 ——
+# HS256 要求密钥 >= 256 bit，短于此会在**签发时**抛 WeakKeyException，
+# 而那时已经登录成功、错误发生在拦截器里，症状是「登录接口 500」。
+# 生成方式（任选其一，长度 >= 43 个 Base64 字符即可）：
+#   openssl rand -base64 48
+#   powershell -c "[Convert]::ToBase64String((1..48 | ForEach-Object {Get-Random -Max 256}))"
+# ⚠ 不要把这里的值复制到任何地方，也不要用它去连生产：生产走环境变量 JWT_SECRET，
+#   两环境密钥必须不同 —— 同密钥意味着开发机签出的 token 能直接打进生产。
+jwt:
+  secret: '<上面方式生成的随机串>'
+
+# 隐含假设 8：上传目录。主配置 ${UPLOAD_PATH:D:/upload/campus-trade/} 是 Windows 路径写法，
+# 在 WSL/Mac 上这个默认值是无效路径（能创建失败，也能创建出一个名叫 "D:" 的目录）。
+# 换环境就写绝对路径，且要保证运行账号有写权限；生产是 /data/campus-trade/upload/。
+# 注意 upload.path 与 upload.base-url 是一对：只配 path 不配 base-url 时，图片地址从请求自身推断，
+# 本机直连没问题，一旦套上反向代理，存进 goods.imgUrl 的就是浏览器打不开的内部地址。
+# upload:
+#   path: D:/upload/campus-trade/
+#   base-url: ''
+
+app:
+  # 本地把超时压到 1 分钟只有一种正确用法：验证「超时会被自动取消」这件事。
+  # 30 分钟没人愿意等，于是有人把它改成 1 然后忘了改回去 —— 而它同时用于队列 TTL，
+  # 已经发出去的消息 TTL 是入队时定死的，改配置不影响在途消息，所以这个开关的效果是延迟出现的。
+  # 演示完请改回 30。
+  order-timeout:
+    minutes: 30
+
+  # 隐含假设 9：Redis 是**软依赖**。false = 连不上也照常启动并降级运行（本地/演示友好），
+  # true = 启动探测失败即拒绝启动（生产建议，见 application-prod.yaml）。
+  # 本地保留 false 的理由：让你在没有 Redis 的机器上也能把应用起来，
+  # 而不是第一眼就被中间件挡住。
+  redis:
+    required: false
+
+  # 隐含假设 10：商品标题搜索 FULLTEXT 的开关。
+  # true（默认）要求 goods 表上已经建好 ft_goods_title，且 MySQL 的 ngram_token_size=2
+  # （**建索引时**决定，事后改配置要重建索引 + OPTIMIZE TABLE，见 P3-2 与 README 的 Docker 段）。
+  # 如果你的库是早期 init.sql 建的、没跑过那段增量 DDL，搜索接口会直接 500（MySQL 1191），
+  # 而不是悄悄变慢 —— 这里就是那把翻回 LIKE 的扳手：
+  # search:
+  #   fulltext-enabled: false
+  #
+  # 另：mybatis-plus.configuration.log-impl 在主配置里是 StdOutImpl（打印 SQL，本地有用），
+  # 生产已由 application-prod.yaml 换成 NoLoggingImpl —— 不要在本地把它关掉，
+  # 「哪条 SQL 真的被执行了」是这里唯一能免费看到的东西。

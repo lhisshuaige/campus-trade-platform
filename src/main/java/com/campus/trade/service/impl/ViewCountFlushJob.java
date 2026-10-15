@@ -1,4 +1,4 @@
-package com.campus.trade.service.imp;
+package com.campus.trade.service.impl;
 
 import com.campus.trade.bean.utils.CacheUtils;
 import com.campus.trade.bean.utils.RedisContent;
