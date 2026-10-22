@@ -7,6 +7,7 @@ import com.campus.trade.bean.exception.BusinessException;
 import com.campus.trade.bean.exception.ErrorCode;
 import com.campus.trade.bean.entity.User;
 import com.campus.trade.bean.utils.JwtUtils;
+import com.campus.trade.bean.utils.RedisContent;
 import com.campus.trade.bean.utils.TokenBlacklistUtils;
 import com.campus.trade.bean.utils.TokenVersionUtils;
 import com.campus.trade.bean.utils.UserActionLimitUtils;
@@ -17,6 +18,7 @@ import com.campus.trade.bean.dto.request.user.UserUpdateDTO;
 import com.campus.trade.bean.vo.UserProfileVo;
 import com.campus.trade.bean.vo.UserVo;
 import com.campus.trade.mapper.UserMapper;
+import com.campus.trade.service.EmailCodeService;
 import com.campus.trade.service.UserService;
 import jakarta.annotation.Resource;
 import org.springframework.beans.BeanUtils;
@@ -65,15 +67,32 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Resource
     private UserMapper userMapper;
 
+    @Resource
+    private EmailCodeService emailCodeService;
+
     // 用户注册
     @Override
     public void register(UserRegisterDTO userRegisterDTO) {
+        // 防恶意注册的闸门：验码必须发生在一切 DB 写之前 —— 放在 save 之后就退化成摆设，
+        // 攻击脚本不发码照样注册。一次性消费与 fail-close 语义见 EmailCodeServiceImpl
+        // 邮箱大小写在这里归一一次，之后预查 / uk_email / 存库 / Redis key 全用同一口径
+        String email = RedisContent.normalizedEmail(userRegisterDTO.getEmail());
+        userRegisterDTO.setEmail(email);
+        emailCodeService.verifyAndConsume(email, userRegisterDTO.getCode());
+
         //判断用户名是否已存在
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(User::getUsername, userRegisterDTO.getUsername());
         User exsituser = getOne(queryWrapper);
         if(exsituser != null){
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,"用户名已存在");
+        }
+        // 邮箱预查：与用户名预查同角色 —— 给人话提示，最终裁判仍是 uk_email
+        LambdaQueryWrapper<User> emailWrapper = new LambdaQueryWrapper<>();
+        emailWrapper.eq(User::getEmail, email);
+        User existEmail = getOne(emailWrapper);
+        if (existEmail != null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,"邮箱已被注册");
         }
         User user = new User();
         BeanUtils.copyProperties(userRegisterDTO, user);
@@ -87,10 +106,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         try {
             save(user);
         } catch (DuplicateKeyException e) {
-            //"先查后插"两步之间可能被并发抢先，uk_username 才是唯一可靠的裁判：
-            //预检给人话，唯一键给正确性（与 addCollect 同一写法）
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR,"用户名已存在,请更换");
+            //"先查后插"两步之间可能被并发抢先，uk_username / uk_email 才是唯一可靠的裁判：
+            //预检给人话，唯一键给正确性（与 addCollect 同一写法）。
+            //两个唯一键都会撞进这里，报错信息不试图区分 —— 区分要解析异常文本，为这点体验不值
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,"用户名或邮箱已存在,请更换");
         }
+    }
+
+    // 发送注册邮箱验证码：限额/冷却/发信纪律都在 EmailCodeServiceImpl，这里只做门面转发
+    @Override
+    public void sendEmailCode(String email) {
+        emailCodeService.sendCode(email);
     }
 
     // 用户登录

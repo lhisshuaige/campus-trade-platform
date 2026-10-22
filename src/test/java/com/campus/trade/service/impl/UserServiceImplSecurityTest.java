@@ -12,6 +12,7 @@ import com.campus.trade.bean.utils.TokenVersionUtils;
 import com.campus.trade.bean.utils.UserActionLimitUtils;
 import com.campus.trade.bean.vo.UserVo;
 import com.campus.trade.mapper.UserMapper;
+import com.campus.trade.service.EmailCodeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -74,6 +75,8 @@ class UserServiceImplSecurityTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private UserMapper userMapper;
+    @Mock
+    private EmailCodeService emailCodeService;
 
     private UserServiceImpl service;
 
@@ -86,6 +89,7 @@ class UserServiceImplSecurityTest {
         ReflectionTestUtils.setField(service, "userActionLimitUtils", userActionLimitUtils);
         ReflectionTestUtils.setField(service, "passwordEncoder", passwordEncoder);
         ReflectionTestUtils.setField(service, "userMapper", userMapper);
+        ReflectionTestUtils.setField(service, "emailCodeService", emailCodeService);
         // 这一行是真实踩出来的：MyBatis-Plus 3.5.16 里 ServiceImpl **自己一个方法也没声明**
         // （javap 实测只有一个构造器），save/getById/getOne 全是 IService 的 default 方法，
         // 它们最终走 getBaseMapper() —— 而 spy 对「没有打桩的方法」是真跑的。
@@ -244,20 +248,26 @@ class UserServiceImplSecurityTest {
         verify(jwtUtils, never()).generateToken(anyLong(), anyString(), anyString(), any());
     }
 
-    // ===================== 注册：明文密码必须止步于 DTO =====================
+    // ===================== 注册：验证码闸门在 DB 之前，明文密码止步于 DTO =====================
+
+    private UserRegisterDTO registerDto(String username, String password, String email, String code) {
+        UserRegisterDTO dto = new UserRegisterDTO();
+        dto.setUsername(username);
+        dto.setPassword(password);
+        dto.setEmail(email);
+        dto.setCode(code);
+        return dto;
+    }
 
     @Test
-    @DisplayName("入库的是编码后的密码，且状态/角色由服务端定，不接受前端传值")
+    @DisplayName("入库的是编码后的密码，且状态/角色由服务端定，不接受前端传值；邮箱落库前已转小写")
     void registerPersistsEncodedPasswordAndServerSideDefaults() {
         doReturn(null).when(service).getOne(any());
         when(passwordEncoder.encode("abc123")).thenReturn("$2a$10$freshhash");
-        UserRegisterDTO dto = new UserRegisterDTO();
-        dto.setUsername("zhang_san");
-        dto.setPassword("abc123");
-        dto.setNickname("张三丰");
 
-        service.register(dto);
+        service.register(registerDto("zhang_san", "abc123", "Student@Campus.EDU.cn", "123456"));
 
+        verify(emailCodeService).verifyAndConsume("student@campus.edu.cn", "123456");
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(service).save(captor.capture());
         User saved = captor.getValue();
@@ -265,16 +275,30 @@ class UserServiceImplSecurityTest {
         assertNotEquals("abc123", saved.getPassword());
         assertEquals(1, saved.getStatus());
         assertEquals("user", saved.getRole());
-        assertEquals("张三丰", saved.getNickname());
+        // 大小写归一发生在 Service 而不是 DTO：uk_email/Redis key/存库必须同一个口径，
+        // 而 @Pattern 不该也不能改值
+        assertEquals("student@campus.edu.cn", saved.getEmail());
+    }
+
+    @Test
+    @DisplayName("验证码不通过时，预查与 insert 都不许发生 —— 闸门若在 DB 之后就是摆设")
+    void registerDoesNotTouchDbWhenCodeRejected() {
+        doThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "邮箱验证码已过期或未发送，请重新获取"))
+                .when(emailCodeService).verifyAndConsume(anyString(), anyString());
+        UserRegisterDTO dto = registerDto("zhang_san", "abc123", "student@campus.edu.cn", "000000");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.register(dto));
+
+        assertEquals(ErrorCode.BUSINESS_ERROR.getCode(), ex.getCode());
+        verify(service, never()).getOne(any());
+        verify(service, never()).save(any());
     }
 
     @Test
     @DisplayName("预检拦下重复名时不该走到 insert")
     void duplicateUsernameIsCaughtBeforeInsert() {
         doReturn(user(1L, "zhang_san", "user", 1)).when(service).getOne(any());
-        UserRegisterDTO dto = new UserRegisterDTO();
-        dto.setUsername("zhang_san");
-        dto.setPassword("abc123");
+        UserRegisterDTO dto = registerDto("zhang_san", "abc123", "student@campus.edu.cn", "123456");
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.register(dto));
 
@@ -283,15 +307,27 @@ class UserServiceImplSecurityTest {
     }
 
     @Test
-    @DisplayName("预检和插入之间的并发窗口由 uk_username 兜住，并翻译成人话")
+    @DisplayName("预检拦下重复邮箱：报错只说邮箱，且同样没走到 insert")
+    void duplicateEmailIsCaughtBeforeInsert() {
+        // 两次 getOne 按调用顺序打桩（用户名查在前、邮箱查在后）—— 这同时把「谁先谁后」固定成断言
+        doReturn(null).doReturn(user(9L, "someone_else", "user", 1))
+                .when(service).getOne(any());
+        UserRegisterDTO dto = registerDto("zhang_san", "abc123", "student@campus.edu.cn", "123456");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.register(dto));
+
+        assertTrue(ex.getMsg().contains("邮箱已被注册"));
+        verify(service, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("预检和插入之间的并发窗口由 uk_username / uk_email 兜住，并翻译成人话")
     void uniqueKeyRaceIsTranslatedIntoBusinessException() {
         doReturn(null).when(service).getOne(any());
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$freshhash");
         doThrow(new DuplicateKeyException("Duplicate entry for key 'uk_username'"))
                 .when(service).save(any());
-        UserRegisterDTO dto = new UserRegisterDTO();
-        dto.setUsername("zhang_san");
-        dto.setPassword("abc123");
+        UserRegisterDTO dto = registerDto("zhang_san", "abc123", "student@campus.edu.cn", "123456");
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.register(dto));
 

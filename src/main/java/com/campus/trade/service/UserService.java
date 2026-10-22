@@ -12,6 +12,8 @@ import com.campus.trade.bean.vo.UserVo;
 public interface UserService extends IService<User> {
     //注册
     void register(UserRegisterDTO userRegisterDTO);
+    //发送注册邮箱验证码（限额与发信纪律在 EmailCodeService，这里只是对控制器的门面）
+    void sendEmailCode(String email);
     //登录
     String login(UserLoginDTO userLoginDTO);
     //退出登录（仅当前 token）

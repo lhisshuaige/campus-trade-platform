@@ -17,8 +17,8 @@ public class User {
     // ==== 入参校验口径：DTO 的注解值直接引用这里，不在两个文件里各抄一遍数字 ====
     // （与 Report.REASON_MAX_LENGTH、Goods.CONDITIONS 是同一手法：实体是口径的唯一来源）
 
-    /** 用户名长度下限：单字符名在登录框里极易误触，也让「同形异名」更好玩 */
-    public static final int USERNAME_MIN_LENGTH = 3;
+    // 用户名没有长度下限（V8 按产品要求放开）：@NotBlank 保证至少 1 个非空白字符，字符集仍由 @Pattern 把关。
+    // 「张三」这类两字实名此前被 3 位下限误伤，是记录在测试里的已知取值，放开即它的正式改判
     /** 用户名长度上限：比列宽 VARCHAR(50) 严 —— 列宽只是物理上限，这个业务口径要钉进 chk_user_username */
     public static final int USERNAME_MAX_LENGTH = 20;
     /**
@@ -42,6 +42,14 @@ public class User {
     /** 手机号：与 init.sql 的 chk_user_phone 同一条口径（DB 允许 NULL，@Pattern 对 null 也跳过，等价） */
     public static final String PHONE_REGEX = "^1[3-9]\\d{9}$";
 
+    /**
+     * 邮箱：与 V7 的 chk_user_email 同一条口径（那个 CHECK 用 [.] 等价写法，原因见迁移文件注释）。
+     * 宽松到「形似邮箱」即可，真实性由验证码证明，不在格式层假装严格；
+     * 上限 100 比列宽 VARCHAR(100) 一致 —— 列宽就是业务口径，不像 username 那样另收一道。
+     */
+    public static final String EMAIL_REGEX = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$";
+    public static final int EMAIL_MAX_LENGTH = 100;
+
     public static final int NICKNAME_MAX_LENGTH = 50;
     public static final int AVATAR_MAX_LENGTH = 500;
 
@@ -54,6 +62,8 @@ public class User {
     private String password;
     private String nickname;
     private String phone;
+    /** 注册邮箱：注册必填且唯一（uk_email），存库前统一 toLowerCase，与 Redis key / 查重同一口径 */
+    private String email;
     private String avatar;
     private String role;
     private Integer status;

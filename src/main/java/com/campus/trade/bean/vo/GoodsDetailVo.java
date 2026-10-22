@@ -21,6 +21,8 @@ public class GoodsDetailVo {
     private BigDecimal expectPrice;
     private String conditionLevel;
     private String tradeLocation;
+    //所在校区（V9），存量商品为 null
+    private String campus;
     //浏览量：详情是单条读，这里给的是 DB 存量 + Redis 未落库增量的实时值
     private Integer viewCount;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

@@ -105,6 +105,18 @@ app:
   # search:
   #   fulltext-enabled: false
   #
+  # 隐含假设 11：邮箱验证码默认走 dev 模式（主配置 app.mail.enabled=${MAIL_ENABLED:false}），
+  # 验证码只打日志、不连 SMTP —— 没有邮箱也能把「发码 → 注册」全链路跑通，日志里抄码即可。
+  # 想真发信（个人邮箱即可，QQ/163 用「SMTP 授权码」而不是登录密码，申请入口在邮箱设置里）：
+  # mail:
+  #   host: smtp.qq.com
+  #   username: '<你的发件邮箱>'
+  #   password: '<SMTP 授权码>'
+  # app:
+  #   mail:
+  #     enabled: true
+  # ⚠ 授权码是这个文件里唯一的对外凭据，别提交、别截图进文章 —— 它 gitignore 的理由和 DB 密码一样
+  #
   # 另：mybatis-plus.configuration.log-impl 在主配置里是 StdOutImpl（打印 SQL，本地有用），
   # 生产已由 application-prod.yaml 换成 NoLoggingImpl —— 不要在本地把它关掉，
   # 「哪条 SQL 真的被执行了」是这里唯一能免费看到的东西。

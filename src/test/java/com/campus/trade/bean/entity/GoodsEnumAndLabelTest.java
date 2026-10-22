@@ -60,6 +60,20 @@ class GoodsEnumAndLabelTest {
     }
 
     @Test
+    @DisplayName("校区恰好两个值、不重复、都装得进 campus 列宽 —— 与 V9 的 chk_goods_campus 同源")
+    void campusWhitelistIsUsable() {
+        assertEquals(2, Goods.CAMPUSES.size());
+        assertEquals(new HashSet<>(Goods.CAMPUSES).size(), Goods.CAMPUSES.size(), "校区不能重复");
+        for (String campus : Goods.CAMPUSES) {
+            assertTrue(campus.length() <= Goods.CAMPUS_MAX_LENGTH,
+                    "校区名超出列宽 campus VARCHAR(" + Goods.CAMPUS_MAX_LENGTH + ")");
+        }
+        // 值本身也被钉死：前端 constants.js 的 GOODS_CAMPUSES、DB 的 CHECK 第三处都认这两个字面值，
+        // 谁改名这三处一起红，而不是让线上徽章悄悄对不上筛选
+        assertEquals(java.util.List.of("黄家湖校区", "青山校区"), Goods.CAMPUSES);
+    }
+
+    @Test
     @DisplayName("金额口径两个常量之和 = DECIMAL(10,2) 的精度，改列宽必须同时改这里")
     void priceDigitsMatchTheColumnDefinition() {
         // DECIMAL(M,D)：M 是总位数、D 是小数位，整数位最多 M-D。列是 (10,2) → 整数最多 8 位

@@ -1,5 +1,6 @@
 package com.campus.trade.controller;
 
+import com.campus.trade.bean.dto.request.user.EmailCodeSendDTO;
 import com.campus.trade.bean.dto.request.user.UserChangePasswordDTO;
 import com.campus.trade.bean.dto.request.user.UserLoginDTO;
 import com.campus.trade.bean.dto.request.user.UserRegisterDTO;
@@ -27,12 +28,23 @@ public class UserController {
 
     // 用户注册
     @PostMapping("/register")
-    @Operation(summary = "用户注册",description = "根据用户名和密码注册新用户")
+    @Operation(summary = "用户注册",description = "根据用户名、密码与邮箱验证码注册新用户")
     @Log("用户注册")
     //按 IP 而不按用户：注册时必定没有登录态，而脚本批量注册的特征就是「同一个出口地址连发」
     @RateLimit(maxCount = 5, dimension = RateLimit.Dimension.IP, message = "注册过于频繁，请稍后再试")
     public MyResult<Void> register(@Valid @RequestBody UserRegisterDTO userRegisterDTO){
         userService.register(userRegisterDTO);
+        return MyResult.success();
+    }
+
+    // 发送注册邮箱验证码：注册的前置接口，同样无登录态、同样按 IP 限
+    // maxCount 比 register 更紧是刻意的：register 一次成功消费一个码，而这个接口一次调用烧一封邮件/一条日志
+    @PostMapping("/email/code")
+    @Operation(summary = "发送注册邮箱验证码", description = "dev 模式（app.mail.enabled=false）验证码只进应用日志")
+    @Log("发送邮箱验证码")
+    @RateLimit(maxCount = 5, dimension = RateLimit.Dimension.IP, key = "email:code", message = "获取验证码过于频繁，请稍后再试")
+    public MyResult<Void> sendEmailCode(@Valid @RequestBody EmailCodeSendDTO emailCodeSendDTO){
+        userService.sendEmailCode(emailCodeSendDTO.getEmail());
         return MyResult.success();
     }
 

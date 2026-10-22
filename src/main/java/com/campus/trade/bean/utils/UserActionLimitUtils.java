@@ -26,8 +26,16 @@ public class UserActionLimitUtils {
      * INCR 原子操作，天然并发安全。
      */
     public boolean tryAcquire(String keyPrefix, Long userId, int maxPerDay) {
+        return tryAcquireByKey(keyPrefix, String.valueOf(userId), maxPerDay);
+    }
+
+    /**
+     * 与上面同一条限额，但主体是任意字符串（如邮箱验证码场景以归一化邮箱为主体 —— 发码时还没有 userId）。
+     * subject 必须是已归一化的值，否则大小写/格式漂移会让同一个主体开出多个桶、每日上限形同虚设
+     */
+    public boolean tryAcquireByKey(String keyPrefix, String subject, int maxPerDay) {
         // key 带日期，天然按天重置；再加 TTL 到当天 24 点，让旧 key 自动清理
-        String key = keyPrefix + userId + ":" + LocalDate.now();
+        String key = keyPrefix + subject + ":" + LocalDate.now();
         Long count = safeRedis.incrOrNull(key);
         if (count == null) {
             // Redis 故障：限流是【保护措施】不是【业务功能】，fail-open 放行。

@@ -17,6 +17,8 @@ public class GoodsVo {
     //列表卡片也要能标出成色与交易地点（二手商品“成色+距离”就是点不点进去的理由）
     private String conditionLevel;
     private String tradeLocation;
+    //卡片左上角校区徽章；存量商品为 null，前端对 null 不渲染徽章
+    private String campus;
     private Integer collectCount;
     //列表里的浏览量只读 DB 存量（最多滞后一个落库周期）：
     //为它逐行去查 Redis，等于给一个展示数字付 10 次命令往返，不值得

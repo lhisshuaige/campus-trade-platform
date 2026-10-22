@@ -100,6 +100,14 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- 邮箱验证码（注册防恶意）：发信走 spring.mail.* 配置。
+             版本由 Boot BOM 管理，与 flyway 同理。默认 app.mail.enabled=false 时只打日志不发信，
+             该 starter 不影响启动（host 留空也不会创建连接） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- 私信实时推送：原生 WebSocket（/ws/chat），不用 STOMP——
              协议只有下行 message/pong 两种，裸 Handler + JSON 足够 -->
         <dependency>

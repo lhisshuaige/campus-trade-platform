@@ -38,11 +38,22 @@ public class Goods {
     public static final List<String> CONDITIONS = List.of(
             "全新", "几乎全新", "轻微使用痕迹", "明显使用痕迹", "有瑕疵可正常使用");
 
+    /**
+     * 校区取值域：与 V9 的 chk_goods_campus 同一条口径（那个 CHECK 允许 NULL，与"存量留空"同构）。
+     * 刻意**不进分类树**：商品只有一个 categoryId，校区若占掉这个坑，「黄家湖的教材」就查不出来了 ——
+     * 分类管"这是什么"，校区管"在哪面交"，两个正交维度各自成列。
+     * trade_location 继续承担具体面交点（"三号宿舍楼下"），本列只管筛选与徽章这两件事
+     */
+    public static final String CAMPUS_HUANGJIAHU = "黄家湖校区";
+    public static final String CAMPUS_QINGSHAN = "青山校区";
+    public static final List<String> CAMPUSES = List.of(CAMPUS_HUANGJIAHU, CAMPUS_QINGSHAN);
+
     // ==== 入参长度与金额口径：DTO 注解直接引用，与 init.sql 的列宽一一对应，不各处抄数字 ====
     public static final int TITLE_MAX_LENGTH = 200;           // 对应 title VARCHAR(200)
     public static final int TRADE_LOCATION_MAX_LENGTH = 100;  // 对应 trade_location VARCHAR(100)
     public static final int CONTACT_MAX_LENGTH = 100;         // 对应 contact VARCHAR(100)
     public static final int CONDITION_MAX_LENGTH = 20;        // 对应 condition_level VARCHAR(20)
+    public static final int CAMPUS_MAX_LENGTH = 20;           // 对应 campus VARCHAR(20)（V9）
     public static final int IMG_URL_MAX_LENGTH = 500;         // 对应 image VARCHAR(500)
 
     /**
@@ -68,6 +79,8 @@ public class Goods {
     private String conditionLevel;
     //交易地点，校园场景多是当面自提，地点决定买家要不要跑一趟
     private String tradeLocation;
+    //所在校区，取值域见 CAMPUSES；V9 加列，存量商品为 NULL（发布新商品必填由 DTO+Service 双层管）
+    private String campus;
     //发布者主动公开的联系方式（微信/QQ/手机号）。属于"他愿意给出去"的信息，
     //但也不给匿名访客：读侧按登录态决定是否返回，见 GoodsServiceImpl.getGoodsDetail
     private String contact;

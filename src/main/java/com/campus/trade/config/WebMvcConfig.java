@@ -54,6 +54,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/user/login",
                         "/user/register",
+                        // 注册验证码同样是匿名接口：漏掉这行，症状是「前端点发送验证码永远 401」，
+                        // 而 Knife4j 上却测得通（手动带了别的 token 就会掩盖这个错误）
+                        "/user/email/code",
                         // 健康探针必须排除：Jwt 拦的是 /**，不排除则 /actuator/health 直接 401。
                         // 而容器编排/K8s 探针拿到 401 会判定"服务不健康"并重启容器 —— 可 Redis
                         // 挂了根本不是重启能解决的，等于把一个降级可用的实例变成 CrashLoopBackOff（P3-17）

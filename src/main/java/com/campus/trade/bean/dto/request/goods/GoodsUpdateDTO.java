@@ -54,6 +54,12 @@ public class GoodsUpdateDTO {
     @Schema(description = "交易地点")
     private String tradeLocation;
 
+    //选填沿用"null=不改动"（上面注释那条策略）。存量商品 campus 本就是 NULL，
+    //编辑页若前端回传空，改校区只能显式传值 —— 不做"空串=清空校区"的歧义语义
+    @Size(max = Goods.CAMPUS_MAX_LENGTH, message = "校区取值不合法")
+    @Schema(description = "校区:黄家湖校区/青山校区,不传表示不修改")
+    private String campus;
+
     @Size(max = Goods.CONTACT_MAX_LENGTH, message = "联系方式不能超过" + Goods.CONTACT_MAX_LENGTH + "字")
     @Schema(description = "对外公开的联系方式")
     private String contact;

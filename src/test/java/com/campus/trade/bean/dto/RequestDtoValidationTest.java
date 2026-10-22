@@ -55,11 +55,18 @@ class RequestDtoValidationTest {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * 基准注册请求：email/code 固定填合法值 —— 注册防恶意改造后它们是必填项，
+     * 其余字段（用户名/密码/手机号）的断言才有「零违规」这条基准可踩。
+     * 邮箱/验证码自己的规则见 emailAndCodeAreRequired 那条，别在这里改默认值。
+     */
     private static UserRegisterDTO register(String username, String password, String phone) {
         UserRegisterDTO dto = new UserRegisterDTO();
         dto.setUsername(username);
         dto.setPassword(password);
         dto.setPhone(phone);
+        dto.setEmail("student@campus.edu.cn");
+        dto.setCode("123456");
         return dto;
     }
 
@@ -71,10 +78,11 @@ class RequestDtoValidationTest {
     }
 
     @Test
-    @DisplayName("用户名：下限 3 是业务口径而不是列宽，非法字符集与超长各自走各自的消息")
+    @DisplayName("用户名只卡上限 20：下限已按产品决策放开（V8），非法字符集与超长各自走各自的消息")
     void usernameRules() {
-        assertTrue(messagesOf(register("张", "abc123", null)).stream().anyMatch(m -> m.contains("用户名长度")));
-        assertTrue(messagesOf(register("ab", "abc123", null)).stream().anyMatch(m -> m.contains("用户名长度")));
+        // 下限放开后 1-2 个字符的短名是合法取值 —— 与 V8 的 chk_user_username(<=20) 同口径
+        assertTrue(messagesOf(register("张", "abc123", null)).isEmpty());
+        assertTrue(messagesOf(register("ab", "abc123", null)).isEmpty());
         assertTrue(messagesOf(register("user@name", "abc123", null))
                 .stream().anyMatch(m -> m.contains("用户名只能用")));
         assertTrue(messagesOf(register("a".repeat(21), "abc123", null)).stream().anyMatch(m -> m.contains("用户名长度")));
@@ -83,17 +91,15 @@ class RequestDtoValidationTest {
     }
 
     @Test
-    @DisplayName("两个字的中文姓名会被长度拦下 —— 已知取值，不是 bug，但它必须被写下来")
-    void twoCharChineseNameIsRejectedByMinLength() {
-        // 写这条的理由：它是本测试第一次运行时真实报出来的失败。「张三」这种两字实名
-        // 在 USERNAME_MIN_LENGTH=3 下无法注册 —— 长度单位是**字符数**而不是显示宽度，
-        // 中文一个字就是 1。这不是写错的正则，是一个需要人拍板的口径（放开到 2 会同时
-        // 放开两字母数字名），所以把它固定成断言而不是删掉：
-        // 将来若决定放开到 2，这条会红，提醒同时改 DB 与文档
-        assertTrue(messagesOf(register("张三", "abc123", null))
-                .stream().anyMatch(m -> m.contains("用户名长度")));
-        // 而三字中文姓名是通的：说明拦它的不是 @Pattern 的字符集，只有长度
-        assertTrue(messagesOf(register("张三丰", "abc123", null)).isEmpty());
+    @DisplayName("「张三」两字实名现在是合法取值 —— 这条就是旧断言预留的那次改判")
+    void twoCharChineseNameIsNowAccepted() {
+        // 原测试记录过：USERNAME_MIN_LENGTH=3 曾把两字实名拦下，且预留「将来放开这条会红」的提醒。
+        // 2026-10-20 正式去掉下限（Java @Size 只剩 max + V8 把 DB CHECK 改成 <=20），
+        // 这里把它翻转成「必须通过」的断言：将来谁想加回下限，会同时被 Java 与 DB 两层拦出红测试
+        assertTrue(messagesOf(register("张三", "abc123", null)).isEmpty());
+        // 但空白名仍然过不了 @NotBlank：「至少 1 个字符」的下限其实是它在兜底
+        assertTrue(messagesOf(register("  ", "abc123", null))
+                .stream().anyMatch(m -> m.contains("用户名不能为空") || m.contains("用户名只能用")));
     }
 
     @Test
@@ -120,6 +126,41 @@ class RequestDtoValidationTest {
                 .stream().anyMatch(m -> m.contains("手机号格式")));
     }
 
+    @Test
+    @DisplayName("邮箱与验证码：注册防恶意改造在 DTO 层的投影 —— 必填、格式、6 位数字各自报错")
+    void emailAndCodeAreRequiredWithOwnMessages() {
+        UserRegisterDTO noEmail = register("zhangsan", "abc123", null);
+        noEmail.setEmail(null);
+        assertTrue(messagesOf(noEmail).stream().anyMatch(m -> m.contains("邮箱不能为空")));
+
+        // 空串与非法格式走同一条 @Pattern 消息（与 phone「没填只许一种表示法」同纪律，
+        // 差别只在 email 没有"没填"这个状态：必填项的空串就该拦）
+        UserRegisterDTO blankEmail = register("zhangsan", "abc123", null);
+        blankEmail.setEmail("");
+        assertTrue(messagesOf(blankEmail).stream().anyMatch(m -> m.contains("邮箱格式不正确")));
+        UserRegisterDTO badEmail = register("zhangsan", "abc123", null);
+        badEmail.setEmail("student@");
+        assertTrue(messagesOf(badEmail).stream().anyMatch(m -> m.contains("邮箱格式不正确")));
+        // 上限 100 与列宽同口径（见 User.EMAIL_MAX_LENGTH），超长先在这层给人话而不是 DB 的 1406
+        UserRegisterDTO longEmail = register("zhangsan", "abc123", null);
+        longEmail.setEmail("a".repeat(101) + "@e.cn");
+        assertTrue(messagesOf(longEmail).stream().anyMatch(m -> m.contains("邮箱过长")));
+
+        UserRegisterDTO noCode = register("zhangsan", "abc123", null);
+        noCode.setCode(null);
+        assertTrue(messagesOf(noCode).stream().anyMatch(m -> m.contains("邮箱验证码不能为空")));
+        UserRegisterDTO shortCode = register("zhangsan", "abc123", null);
+        shortCode.setCode("12345");
+        assertTrue(messagesOf(shortCode).stream().anyMatch(m -> m.contains("验证码为6位数字")));
+        UserRegisterDTO lettersCode = register("zhangsan", "abc123", null);
+        lettersCode.setCode("abc123");
+        assertTrue(messagesOf(lettersCode).stream().anyMatch(m -> m.contains("验证码为6位数字")));
+    }
+
+    /**
+     * 基准商品发布请求：campus 固定填合法值（校区必填是 V9 引入的写入闸门），
+     * 其余断言的「零违规」基准才有落脚点。校区自己的规则见 campusIsRequired 那条。
+     */
     private static GoodsAddDTO goods(String title, BigDecimal price, BigDecimal expectPrice, String condition) {
         GoodsAddDTO dto = new GoodsAddDTO();
         dto.setCategoryId(1L);
@@ -127,7 +168,21 @@ class RequestDtoValidationTest {
         dto.setPrice(price);
         dto.setExpectPrice(expectPrice);
         dto.setConditionLevel(condition);
+        dto.setCampus(Goods.CAMPUS_HUANGJIAHU);
         return dto;
+    }
+
+    @Test
+    @DisplayName("校区必填：不传/空串都拦 —— 面交场景里不知道在哪个校区等于没发布")
+    void campusIsRequiredOnAdd() {
+        GoodsAddDTO noCampus = goods("教材", BigDecimal.ONE, null, null);
+        noCampus.setCampus(null);
+        assertTrue(messagesOf(noCampus).stream().anyMatch(m -> m.contains("请选择校区")));
+        GoodsAddDTO blankCampus = goods("教材", BigDecimal.ONE, null, null);
+        blankCampus.setCampus("");
+        assertTrue(messagesOf(blankCampus).stream().anyMatch(m -> m.contains("请选择校区")));
+        // 注意"第三种校区名"（如"光谷校区"）过得了这里的 @Size，它的归宿是 Service 白名单
+        // 与 V9 的 chk_goods_campus —— 与成色"九成新过 DTO 不过 Service"是同一层分工（见类 javadoc）
     }
 
     @Test

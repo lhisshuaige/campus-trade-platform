@@ -121,6 +121,23 @@ spring:
           initial-interval: 2000ms
         #本机没装 MQ 时设为 false，消费者不启动，不刷重连日志
         auto-startup: ${MQ_LISTENER_AUTO_STARTUP:true}
+  # 邮箱验证码发信（注册防恶意）。默认全空 = 只有 app.mail.enabled=true 时才会真正连 SMTP，
+  # dev 模式（默认 false）验证码只进日志，不碰外部服务。真实凭据放 application-local.yaml/环境变量
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          # 发信在注册请求线程里，SMTP 对端抽风不能把接口挂死：读写都设死线
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
 mybatis-plus:
   type-aliases-package: com.campus.trade.bean.entity
@@ -229,3 +246,18 @@ app:
     #敏感词表，逗号分隔，例："代刷,幽灵商品,加微信付款"；
     #留空 = 只依长度拦不依词表拦（不把一套假词库当代码的一部分，词表要随治理口径变）
     sensitive-words: ""
+  mail:
+    # false = 验证码只打日志不发信（本地/演示默认，链路可全流程验证）；
+    # true = 真实 SMTP 发送，需要 spring.mail.host/username/password 三个环境变量就位
+    enabled: ${MAIL_ENABLED:false}
+    # 发件人显示名，留空回退 spring.mail.username（QQ/163 要求 from == 登录账号，别乱填）
+    from: ${MAIL_FROM:}
+  email-code:
+    # 验证码在 Redis 的存活时长（分钟）：到期由 Redis 自动清理，不写定时任务
+    ttl-minutes: 5
+    # 同一邮箱两次发码的最小间隔（SETNX 冷却 key 的 TTL），挡住「按住重发」烧额度
+    resend-cooldown-seconds: 60
+    # 同一邮箱当日发码上限（桶在 RedisContent.Email_Code_Daily_KEY，与登录/上传桶分开的道理相同）
+    daily-limit: 10
+    # 验证连续输错达到此次数即删码作废：6 位码只有 100 万组合，不设错次上限等于给人慢慢猜
+    max-verify-fail: 5

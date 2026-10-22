@@ -21,6 +21,16 @@ public class RedisContent {
     // 登录连续失败计数 key 前缀（实际 key = 前缀 + userId），TTL = 锁定时长，到期自动解锁
     public static final String User_Login_Fail_KEY = "user:login:fail:";
 
+    // ==== 邮箱验证码一族（注册防恶意）：key 主体一律是【已转小写】的邮箱，见 emailCodeKey ====
+    // 验证码本体（实际 key = 前缀 + email），TTL = 有效期，过期即作废，不做清理任务
+    public static final String Email_Code_KEY = "email:code:";
+    // 同邮箱重发冷却（实际 key = 前缀 + email），SETNX + TTL = 冷却秒数，抢不到就是在冷却期内
+    public static final String Email_Code_Cooldown_KEY = "email:code:cooldown:";
+    // 验证连续输错计数（实际 key = 前缀 + email），TTL 与验证码同窗，够次数即删码作废
+    public static final String Email_Code_Fail_KEY = "email:code:fail:";
+    // 每邮箱当日发码计数桶（喂给 UserActionLimitUtils，与登录/上传桶分开的道理相同）
+    public static final String Email_Code_Daily_KEY = "email:code:daily:";
+
     // 商品下单分布式锁 key 前缀（实际 key = 前缀 + goodsId）
     public static final String Goods_Lock_KEY = "lock:goods:";
     public static final String Order_NO_KEY = "order:no:";
@@ -69,6 +79,27 @@ public class RedisContent {
 
     public static String commentListKey(Long goodsId) {
         return Comment_List_KEY + goodsId;
+    }
+
+    /**
+     * 邮箱做 key 主体前的统一小写归一：MySQL 默认排序规则不分大小写（uk_email 会拦 A@x 与 a@x 撞车），
+     * 而 Redis key 分大小写 —— 不归一，"A@x.com 发码、a@x.com 注册"就能绕过一次性约束。
+     * 也用于喂 UserActionLimitUtils 的每日桶 subject
+     */
+    public static String normalizedEmail(String email) {
+        return email.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    public static String emailCodeKey(String email) {
+        return Email_Code_KEY + normalizedEmail(email);
+    }
+
+    public static String emailCodeCooldownKey(String email) {
+        return Email_Code_Cooldown_KEY + normalizedEmail(email);
+    }
+
+    public static String emailCodeFailKey(String email) {
+        return Email_Code_Fail_KEY + normalizedEmail(email);
     }
 
     // ==== 统计类 key：维度名写在这里，而不是在 Service 里拼字面量 ====

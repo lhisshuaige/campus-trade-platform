@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -196,12 +197,15 @@ class MysqlMigrationAndFulltextIT {
     @SuppressWarnings("SqlNoDataSourceInspection")
     void checkConstraintsActuallyReject() {
         migrateOnce();
-        // 「张三」两字：Java 侧 User.USERNAME_MIN_LENGTH=3 拦一次，DB 侧 chk_user_username 再拦一次。
-        // RequestDtoValidationTest 已经把这个取值固定成断言，这里是它的库侧 counterpart ——
-        // 两处都在，才算「口径只有一个，执行点有两个」
-        assertThrows(SQLException.class,
+        // 用户名长度下限已由 V8 放开（只剩 <=20 的上限）：两字名在库侧应当【放行】。
+        // 这条断言与 RequestDtoValidationTest 的改判是同一件事的两半 ——
+        // 口径改一次，Java 与 DB 两个执行点必须同步翻转，少翻一边就是漂移
+        assertDoesNotThrow(
                 () -> exec("INSERT INTO user (username, password) VALUES ('张三', 'x')"),
-                "chk_user_username 必须拦住两字用户名");
+                "V8 之后两字用户名应当被库接受（下限已放开）");
+        assertThrows(SQLException.class,
+                () -> exec("INSERT INTO user (username, password) VALUES ('" + "a".repeat(21) + "', 'x')"),
+                "chk_user_username 仍必须拦住超过 20 字符的用户名");
         assertThrows(SQLException.class,
                 () -> exec("INSERT INTO user (username, password, phone) VALUES ('it_phone_bad', 'x', '12345')"),
                 "chk_user_phone 必须拦住非 1[3-9] 开头的号码");

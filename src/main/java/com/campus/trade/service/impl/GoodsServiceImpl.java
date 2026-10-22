@@ -90,7 +90,8 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
     public void addGoods(GoodsAddDTO goodsAddDTO, Long loginUserId) {
         //二手关键字段与 UGC 文本的预检，与修改路径共用同一个方法
         checkGoodsContent(goodsAddDTO.getTitle(), goodsAddDTO.getDescription(),
-                goodsAddDTO.getConditionLevel(), goodsAddDTO.getPrice(), goodsAddDTO.getExpectPrice());
+                goodsAddDTO.getConditionLevel(), goodsAddDTO.getCampus(),
+                goodsAddDTO.getPrice(), goodsAddDTO.getExpectPrice());
         Goods goods = new Goods();
         BeanUtils.copyProperties(goodsAddDTO, goods);
         //绑定用户id
@@ -122,7 +123,8 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
         BigDecimal effectiveExpect = goodsUpdateDTO.getExpectPrice() != null
                 ? goodsUpdateDTO.getExpectPrice() : existsGoods.getExpectPrice();
         checkGoodsContent(goodsUpdateDTO.getTitle(), goodsUpdateDTO.getDescription(),
-                goodsUpdateDTO.getConditionLevel(), goodsUpdateDTO.getPrice(), effectiveExpect);
+                goodsUpdateDTO.getConditionLevel(), goodsUpdateDTO.getCampus(),
+                goodsUpdateDTO.getPrice(), effectiveExpect);
         //乐观锁（P3-6）：版本号只从库里读，绝不由前端传（DTO 里根本没有 version 字段）。
         //带上之后 updateById 会多一条 WHERE version = ?，并自动把列写成 +1：
         //两个端同时改同一件商品，后提交的那一份不再能把前一份的字段连带覆盖掉
@@ -138,9 +140,9 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
         cacheUtils.evictAfterCommit(RedisContent.Collect_Rank_KEY);
     }
 
-    //商品内容统一预检：成色取值域 + 议价底线合理性 + 敏感词。
+    //商品内容统一预检：成色取值域 + 校区取值域 + 议价底线合理性 + 敏感词。
     //add/update 两个入口共用，否则“只改一处”的漏洞迟早出现（和 doPageGoods 、 applyStatusChange 是同一条道理）
-    private void checkGoodsContent(String title, String description, String conditionLevel,
+    private void checkGoodsContent(String title, String description, String conditionLevel, String campus,
                                    BigDecimal price, BigDecimal expectPrice) {
         //先校敏感词再校长度：长度由 DTO 的 @Size 拦，这里只管内容健不健康
         contentAuditUtils.assertClean(title, "goods.title");
@@ -150,6 +152,13 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
                 && !Goods.CONDITIONS.contains(conditionLevel)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR,
                     "成色只能是：" + String.join("/", Goods.CONDITIONS));
+        }
+        //校区与成色的判定刻意不同：这里 null=不改动才跳过，而空串【不】跳过 ——
+        //MP 的 updateById 对空串是"要更新成空串"，放过去就会被 chk_goods_campus 顶成 500，
+        //在人话 400 和 500 之间，永远选人话
+        if (campus != null && !Goods.CAMPUSES.contains(campus)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR,
+                    "校区只能是：" + String.join("/", Goods.CAMPUSES));
         }
         if (expectPrice != null) {
             if (price == null) {
@@ -257,7 +266,8 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
     public Page<GoodsVo> getGoodsByOwner(GoodsPageQueryDTO goodsPageQueryDTO, Long loginUserId) {
         //userId 一律用登录态覆盖，不接受前端传值（防越权看别人的下架商品）
         return doPageGoods(goodsPageQueryDTO.getPageNum(), goodsPageQueryDTO.getPageSize(),
-                loginUserId, goodsPageQueryDTO.getCategoryId(), goodsPageQueryDTO.getKeyword(), null);
+                loginUserId, goodsPageQueryDTO.getCategoryId(), goodsPageQueryDTO.getCampus(),
+                goodsPageQueryDTO.getKeyword(), null);
     }
 
     //获取所有商品（公开列表：只看在售）
@@ -266,7 +276,7 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
         //"仅在售"这条业务规则收在调用处，不再各写一份 wrapper
         return doPageGoods(goodsPageQueryDTO.getPageNum(), goodsPageQueryDTO.getPageSize(),
                 goodsPageQueryDTO.getUserId(), goodsPageQueryDTO.getCategoryId(),
-                goodsPageQueryDTO.getKeyword(), Goods.STATUS_ON_SALE);
+                goodsPageQueryDTO.getCampus(), goodsPageQueryDTO.getKeyword(), Goods.STATUS_ON_SALE);
     }
 
     //管理端商品治理列表：可跨卖家、可按任意状态筛
@@ -278,7 +288,7 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
             throw new BusinessException(ErrorCode.PARAM_ERROR, "商品状态取值只能是 0下架/1在售/2已售出");
         }
         return doPageGoods(queryDTO.getPageNum(), queryDTO.getPageSize(),
-                queryDTO.getUserId(), queryDTO.getCategoryId(), queryDTO.getKeyword(), status);
+                queryDTO.getUserId(), queryDTO.getCategoryId(), null, queryDTO.getKeyword(), status);
     }
 
     /**
@@ -287,7 +297,7 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
      * status 传 null 表示不限状态；传 1 就是公开列表的"仅在售"。
      */
     private Page<GoodsVo> doPageGoods(Integer pageNum, Integer pageSize, Long userId,
-                                      Long categoryId, String keyword, Integer status) {
+                                      Long categoryId, String campus, String keyword, Integer status) {
         Page<Goods> page1 = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<Goods> queryWrapper = new LambdaQueryWrapper<>();
         if (userId != null) {
@@ -295,6 +305,11 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
         }
         if (categoryId != null) {
             queryWrapper.eq(Goods::getCategoryId, categoryId);
+        }
+        //校区与分类同为 eq、互不干扰 —— 这两个维度能同时生效正是当初不把校区做进分类树的原因。
+        //不传 = 全部（含 V9 之前 campus 为 NULL 的存量商品）；传了则 NULL 行被排除，这是"按校区筛"的应有之义
+        if (campus != null && !campus.isBlank()) {
+            queryWrapper.eq(Goods::getCampus, campus);
         }
         //标题关键词（P3-2）：以前只有 LIKE '%kw%' 一条路，前置通配任何索引都走不上；
         //现在两个入口只差“同一个关键词交给谁算”，判定只写在这一处（三个列表入口共用本方法，

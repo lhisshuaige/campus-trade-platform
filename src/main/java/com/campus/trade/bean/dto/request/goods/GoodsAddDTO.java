@@ -53,6 +53,13 @@ public class GoodsAddDTO {
     @Schema(description = "交易地点,如:东三门/3号宿舍楼下")
     private String tradeLocation;
 
+    //校区必填：面交场景里"在哪个校区"直接决定这单能不能做成。
+    //分工沿用成色那套：@NotBlank 管必填，取值域白名单归 checkGoodsContent（Goods.CAMPUSES ↔ V9 CHECK 同源）
+    @NotBlank(message = "请选择校区")
+    @Size(max = Goods.CAMPUS_MAX_LENGTH, message = "校区取值不合法")
+    @Schema(description = "校区:黄家湖校区/青山校区")
+    private String campus;
+
     @Size(max = Goods.CONTACT_MAX_LENGTH, message = "联系方式不能超过" + Goods.CONTACT_MAX_LENGTH + "字")
     @Schema(description = "对外公开的联系方式(微信/QQ/手机号),不填则详情页不展示联系入口")
     private String contact;

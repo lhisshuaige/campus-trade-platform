@@ -12,6 +12,10 @@ public class GoodsPageQueryDTO {
     @Schema(description = "商品分类id,可以不传")
     private Long categoryId;
 
+    //与 categoryId 正交：分类管"这是什么"，校区管"在哪面交"，两个条件可以同时生效
+    @Schema(description = "校区(黄家湖校区/青山校区),可以不传")
+    private String campus;
+
     @Schema(description = "商品关键字,可以不传")
     private String keyword;
 
