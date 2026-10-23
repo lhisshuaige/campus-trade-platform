@@ -15,6 +15,9 @@ public class CommentVo {
     @Schema(description = "商品id")
     private Long goodsId;
 
+    @Schema(description = "评论人id（点头像进TA的主页用）")
+    private Long userId;
+
     @Schema(description = "评论人昵称")
     private String nickname;
 

@@ -330,8 +330,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         return ordered;
     }
 
-    //缓存行 → 公开 VO。userId 不在 CommentVo 里，copyProperties 之后天然被裁掉；
-    //isOwner 在这里现算 —— 顶层与回复同一条规则（回复行也要"我的回复可自删"）
+    //缓存行 → 公开 VO。userId 现在是随行进公开出参的（前端点头像进 TA 的主页要用）——
+    //这不构成新的信息暴露：主页路由 /seller/:id 本来就任何登录用户可进，商品 VO 也一直带着 sellerId；
+    //isOwner 仍在这里现算 —— 顶层与回复同一条规则（回复行也要"我的回复可自删"）
     private CommentVo toVo(CommentCacheItem item, Long loginUserId) {
         CommentVo commentVo = new CommentVo();
         BeanUtils.copyProperties(item, commentVo);
@@ -421,10 +422,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
 
     /**
      * 评论列表在 Redis 里的存储结构。
-     * 为什么不直接缓存 CommentVo：CommentVo 是公开出参，按规范不能带 userId；
-     * 而读侧要拿 userId 才能算出 isOwner（回复行还要拿 replyToUserId 推 @ 昵称）——
-     * 所以"带 userId 的内部结构"和"不带的出参"必须分开。
-     * 这个类的 JSON 只落在 Redis 里，永远不会出现在任何 HTTP 响应中。
+     * 为什么不直接缓存 CommentVo：这是"组装输入端"，比出参多几个只服务于读侧派生的内部字段
+     *（replyToUserId 用来现推 @ 昵称、userId 用来算 isOwner），而 CommentVo 是"组装输出端"，
+     * 带派生结果（isOwner/replyToNickname/楼内分节）不带推导原料 —— 两个方向的形状本就该分开维护。
      * 楼中楼兼容：老缓存 JSON 缺 parent_id/reply_to_user_id/reply_to_comment_id/avatar 字段，
      * hutool 解析为 null —— "顶层、无 @、无头像、排布走 @ 人保守归组"，对存量数据恰好是事实。
      * （缓存语义每翻一次就换 key 版本，见 RedisContent 的 v2/v3 注释；这里是形状变化的兜底说明）

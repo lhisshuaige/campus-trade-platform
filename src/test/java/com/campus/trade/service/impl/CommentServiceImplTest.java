@@ -147,6 +147,8 @@ class CommentServiceImplTest {
         CommentVo first = page.getRecords().get(0);
         assertEquals(10L, first.getId());               // 顶层按时间倒序，最新的楼在前
         assertTrue(first.getIsOwner());
+        //新契约：出参带 userId（前端点头像进主页）—— 主页路由本就公开，这不是新暴露
+        assertEquals(2L, first.getUserId());
         assertEquals(5, first.getReplyCount());
         //置顶组只有 13（回楼主主评论，无箭头）→ 它就是预览那条，哪怕接话组里有更新的丁
         assertEquals(List.of(13L), first.getReplies().stream().map(CommentVo::getId).toList());
