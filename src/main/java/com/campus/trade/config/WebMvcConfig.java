@@ -46,6 +46,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/goods/getDetail",
                         "/category/getAll",
                         "/comment/list",
+                        // 楼中楼的展开与列表同一种权限形态：游客可看，登录只影响 isOwner 计算
+                        "/comment/replies",
                         "/user/profile/**"
                 ).order(0);
         // 认证拦截器：校验登录状态（先执行）
@@ -75,6 +77,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/goods/getCollectRank",
                         "/category/getAll",
                         "/comment/list",
+                        // 楼中楼展开：与 /comment/list 同进同退，两处列表漏一处的症状都是「游客看不了回复」
+                        "/comment/replies",
                         "/user/profile/**",
                         // 私信 WebSocket：握手是 HTTP Upgrade，本就不走 MVC 拦截器链；
                         // 显式排除是防"将来有人把 /ws 并进统一入口"时握手被 401 拦死。

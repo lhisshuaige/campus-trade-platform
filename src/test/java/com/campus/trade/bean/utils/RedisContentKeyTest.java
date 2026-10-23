@@ -24,7 +24,10 @@ class RedisContentKeyTest {
     @DisplayName("带 id 的缓存 key：前缀 + id，一次拼装成一个确定字符串（写侧要能算出该删哪个）")
     void keyedPrefixesComposeDeterministically() {
         assertEquals("goods:detail:7", RedisContent.goodsDetailKey(7L));
-        assertEquals("comment:list:7", RedisContent.commentListKey(7L));
+        // comment:list 带版本段是刻意的：v2 楼内正序→倒序，v3 回楼主主评论一组置顶（+行形状加
+        // replyToCommentId）—— 语义翻转旧缓存无从察觉，只能换 key；下次再翻请继续 v4，
+        // 而不是悄悄复用旧 key 让 5 分钟逻辑 TTL 去"自愈"
+        assertEquals("comment:list:v3:7", RedisContent.commentListKey(7L));
         assertEquals("lock:goods:7", RedisContent.Goods_Lock_KEY + 7L);
         assertEquals("user:tokenVersion:7", RedisContent.User_Token_Version_KEY + 7L);
     }

@@ -29,6 +29,10 @@ public class CommentAdminVo {
     @Schema(description = "评论内容")
     private String content;
 
+    /** 楼中楼：治理列表是扁平的（顶层与回复混排），靠这个字段认出"这是一条回复" */
+    @Schema(description = "所在顶层评论id；null=顶层评论")
+    private Long parentId;
+
     @Schema(description = "评论时间")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;

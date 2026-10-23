@@ -41,8 +41,13 @@ public class RedisContent {
     // 评论列表缓存 key 前缀（实际 key = 前缀 + goodsId）：一个商品一个 key，
     // 发/删评论、删商品都能精确算出要删哪个，所以值得缓存。
     // 缓存的是"与登录者无关"的评论行，isOwner 由读侧按当前登录人现算
-    //（把 isOwner 写进共享 key，A 的"我的评论"就会返回给 B 看）
-    public static final String Comment_List_KEY = "comment:list:";
+    //（把 isOwner 写进共享 key，A 的"我的评论"就会返回给 B 看）。
+    // v2：楼内回复序从"时间正序"翻成"时间倒序（最新在前）"——行的【形状】没变、变的是【语义】，
+    // 旧缓存读起来完全合法，没有任何代码路径会察觉要重灌，唯一可靠的失效办法就是换 key 版本；
+    // v3：再犯一次同款 —— 楼内排布从"纯时间倒序"翻成"回楼主主评论的先置顶、其余靠后"，
+    //     又加了 replyToCommentId 字段（行形状也变了），双管齐下必须再换版本；
+    // 旧 comment:list:* 成了孤儿键，靠物理 TTL（24h+抖动）自然消失，不需要上线时手工清理
+    public static final String Comment_List_KEY = "comment:list:v3:";
 
     // 收藏排行榜缓存 key：故意不带 limit 后缀，只存 Top50 全集，读取时在内存里截断。
     // 若做成 collect:rank:{limit} 一堆 key，收藏/上下架后无法枚举失效，只能等 TTL 自然过期；

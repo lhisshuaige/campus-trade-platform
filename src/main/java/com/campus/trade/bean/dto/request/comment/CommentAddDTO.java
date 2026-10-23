@@ -22,4 +22,13 @@ public class CommentAddDTO {
     @Size(max = ContentAuditUtils.COMMENT_MAX_LENGTH, message = "评论内容过长，请精简后再发布")
     @Schema(description = "评论内容，最长 200 字")
     private String content;
+
+    /** 楼中楼：为空=发顶层评论；非空=在该楼内回复（传回复的 id 也会被服务端归一化到它所在楼根） */
+    @Schema(description = "顶层评论id（可选，回复时传）")
+    private Long parentId;
+
+    /** 楼中楼：@ 的具体对象（可空，默认为 parent 的作者）。只在 parentId 非空时有意义，
+     *  服务端会校验它确实属于同一楼（防"跨楼认领"把 @ 挂到别人家的对话上） */
+    @Schema(description = "被回复的评论id（可选，回复具体某条时传）")
+    private Long replyToCommentId;
 }

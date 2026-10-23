@@ -1,8 +1,10 @@
 package com.campus.trade.bean.dto;
 
+import com.campus.trade.bean.dto.request.comment.CommentAddDTO;
 import com.campus.trade.bean.dto.request.goods.GoodsAddDTO;
 import com.campus.trade.bean.dto.request.user.UserRegisterDTO;
 import com.campus.trade.bean.entity.Goods;
+import com.campus.trade.bean.utils.ContentAuditUtils;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -161,6 +163,31 @@ class RequestDtoValidationTest {
      * 基准商品发布请求：campus 固定填合法值（校区必填是 V9 引入的写入闸门），
      * 其余断言的「零违规」基准才有落脚点。校区自己的规则见 campusIsRequired 那条。
      */
+    @Test
+    @DisplayName("评论 DTO：content 必填+限长是接口契约；楼中楼两个可选 id 空着零违规")
+    void commentDtoRules() {
+        CommentAddDTO c = new CommentAddDTO();
+        c.setGoodsId(1L);
+        c.setContent("书还在吗");
+        assertTrue(messagesOf(c).isEmpty(), "顶层评论的既有形态不能被新字段弄红（回归基准）");
+
+        c.setParentId(10L); c.setReplyToCommentId(11L);
+        assertTrue(messagesOf(c).isEmpty(), "回复行的两个可选 id 不该引入新违规");
+
+        CommentAddDTO blank = new CommentAddDTO();
+        blank.setGoodsId(1L);
+        assertTrue(messagesOf(blank).stream().anyMatch(m -> m.contains("内容不能为空")));
+
+        CommentAddDTO longC = new CommentAddDTO();
+        longC.setGoodsId(1L);
+        longC.setContent("字".repeat(ContentAuditUtils.COMMENT_MAX_LENGTH + 1));
+        assertTrue(messagesOf(longC).stream().anyMatch(m -> m.contains("评论内容过长")));
+
+        CommentAddDTO noGoods = new CommentAddDTO();
+        noGoods.setContent("hi");
+        assertTrue(messagesOf(noGoods).stream().anyMatch(m -> m.contains("商品id不能为空")));
+    }
+
     private static GoodsAddDTO goods(String title, BigDecimal price, BigDecimal expectPrice, String condition) {
         GoodsAddDTO dto = new GoodsAddDTO();
         dto.setCategoryId(1L);

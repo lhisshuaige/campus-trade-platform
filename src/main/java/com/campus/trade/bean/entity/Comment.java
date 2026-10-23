@@ -16,6 +16,16 @@ public class Comment {
     private Long id;
     private Long goodsId;
     private Long userId;
+    /** 所在【顶层评论】ID；NULL=顶层。写入侧已归一化（楼中楼只两层），永远指楼根而不是"回复的上一条" */
+    private Long parentId;
+    /** 被回复那条评论的作者；仅回复行有值（DB 有 chk_comment_reply_shape 兜住这个单行不变量） */
+    private Long replyToUserId;
+    /**
+     * 被 @ 的【具体那一行】的 id；NULL=V11 之前的存量。
+     * 和 replyToUserId 分开存，是因为"回楼主主评论"与"回楼主的楼内回复"是同一个人，
+     * 只靠 userId 分不开 —— 而楼内排布（回主评论置顶、接楼内话靠后）全靠这一列判定
+     */
+    private Long replyToCommentId;
     private String content;
     /**
      * 逻辑删除位（@TableLogic）。评论是内容而不是关系行：“删掉”不该等于“销毁”。
