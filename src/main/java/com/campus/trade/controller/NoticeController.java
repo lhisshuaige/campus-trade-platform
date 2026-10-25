@@ -36,10 +36,10 @@ public class NoticeController {
     }
 
     @GetMapping("/unreadCount")
-    @Operation(summary = "未读消息数", description = "给角标用，只返回计数")
-    public MyResult<Long> unreadCount(HttpServletRequest request) {
+    @Operation(summary = "未读消息数", description = "给角标用，只返回计数；type 可选按类过滤(order/comment/collect/system)，缺省=全部")
+    public MyResult<Long> unreadCount(@RequestParam(required = false) String type, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        return MyResult.success(noticeService.unreadCount(loginUserId));
+        return MyResult.success(noticeService.unreadCount(loginUserId, type));
     }
 
     @PutMapping("/read")
@@ -51,9 +51,9 @@ public class NoticeController {
     }
 
     @PutMapping("/readAll")
-    @Operation(summary = "全部标记已读", description = "返回真正被改动的条数")
-    public MyResult<Integer> readAll(HttpServletRequest request) {
+    @Operation(summary = "全部标记已读", description = "返回真正被改动的条数；type 可选只清该类（如进我卖出页清 order），缺省=全部")
+    public MyResult<Integer> readAll(@RequestParam(required = false) String type, HttpServletRequest request) {
         Long loginUserId = (Long) request.getAttribute("loginUserId");
-        return MyResult.success(noticeService.markAllRead(loginUserId));
+        return MyResult.success(noticeService.markAllRead(loginUserId, type));
     }
 }

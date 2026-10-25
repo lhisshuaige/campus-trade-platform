@@ -72,12 +72,15 @@ public class NoticeServiceImpl extends ServiceImpl<NoticeMapper, Notice> impleme
         });
     }
 
-    //角标只查计数不查列表：前端每次进页面都要读它，查列表再数长度是白白搬一堆正文回来
+    //角标只查计数不查列表：前端每次进页面都要读它，查列表再数长度是白白搬一堆正文回来。
+    //type 是外部参数，但它只是查询过滤器：user_id 条件永远在场，越不了权别人的消息；
+    //传了非法 type 只会数出 0，不值得为它开白名单校验
     @Override
-    public long unreadCount(Long loginUserId) {
+    public long unreadCount(Long loginUserId, String type) {
         return count(new LambdaQueryWrapper<Notice>()
                 .eq(Notice::getUserId, loginUserId)
-                .eq(Notice::getIsRead, Notice.UNREAD));
+                .eq(Notice::getIsRead, Notice.UNREAD)
+                .eq(type != null && !type.isBlank(), Notice::getType, type));
     }
 
     @Override
@@ -102,11 +105,13 @@ public class NoticeServiceImpl extends ServiceImpl<NoticeMapper, Notice> impleme
         }
     }
 
+    //type 非空只清该类（进"我卖出"清 order 通知，不误伤评论/收藏的未读）；user_id 恒在，清不到别人
     @Override
-    public int markAllRead(Long loginUserId) {
+    public int markAllRead(Long loginUserId, String type) {
         LambdaUpdateWrapper<Notice> wrapper = new LambdaUpdateWrapper<>();
         wrapper.eq(Notice::getUserId, loginUserId)
                 .eq(Notice::getIsRead, Notice.UNREAD)
+                .eq(type != null && !type.isBlank(), Notice::getType, type)
                 .set(Notice::getIsRead, Notice.READ);
         return baseMapper.update(null, wrapper);
     }

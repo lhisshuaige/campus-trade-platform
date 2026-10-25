@@ -73,6 +73,12 @@ public class OrderTradeFacade {
         orderService.completeOrder(orderId, buyerId);
     }
 
+    //删除已取消订单：无锁、无消息、无多步临界区 —— 这里的纯直通只为守住
+    //"controller 的交易写操作只有 facade 一个入口"，别为了省一行让 controller 学会两条路
+    public void deleteCancelledOrder(Long orderId, Long userId) {
+        orderService.deleteCancelledOrder(orderId, userId);
+    }
+
     //预留：如需按商品维度做其它多步操作，锁 key 在这里统一取，避免各 Service 自己拼
     static String goodsLockKey(Long goodsId) {
         return RedisContent.Goods_Lock_KEY + goodsId;

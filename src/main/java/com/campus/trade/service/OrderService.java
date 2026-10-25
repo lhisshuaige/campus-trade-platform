@@ -13,6 +13,10 @@ public interface OrderService {
     //完成交易=买家确认收货，只允许买家触发
     void completeOrder(Long orderId, Long buyerId);
     void cancelOrder(Long orderId, Long userId);
+    //删除已取消订单：已取消是终态，没有"当时写了什么"要追责的内容，所以是物理删除、
+    //不像评论那样留逻辑删痕迹（那是"内容"的纪律，订单是交易事件的登记）。
+    //任一方删、双方都看不见 —— 这个取舍写死在这里，免得日后被当 bug"修"回去
+    void deleteCancelledOrder(Long orderId, Long loginUserId);
     //订单详情：只有买卖双方能看；管理员看订单走 /admin/order/page
     OrderVo getOrderDetail(Long orderId, Long loginUserId);
     //status 传 null 表示不限状态

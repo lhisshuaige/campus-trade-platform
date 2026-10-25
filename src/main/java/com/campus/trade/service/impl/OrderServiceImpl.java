@@ -218,6 +218,25 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return goods != null ? goods.getTitle() : "已下架商品";
     }
 
+    //删除已取消订单：状态与归属校验都在服务端，前端按钮只是提示不是防线。
+    //先查归属再查状态：让无关的人永远只听到"无权操作"，不泄露"这单存在且是什么状态"
+    @Override
+    public void deleteCancelledOrder(Long orderId, Long loginUserId) {
+        Order order = getById(orderId);
+        if (order == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "订单不存在");
+        }
+        if (!order.getSellerId().equals(loginUserId) && !order.getBuyerId().equals(loginUserId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权操作此订单");
+        }
+        if (order.getStatus() != Order.STATUS_CANCELLED) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "只能删除已取消的订单");
+        }
+        //已取消是终态：没有任何并发路径还会改这行（confirm/complete/cancel 的状态机都不再接它），
+        //单行物理删自带原子性 —— 不加锁、不用 CAS，与"能不加并发原语就不加"的既有纪律一致
+        removeById(orderId);
+    }
+
     // 分页查询我的购买订单
     @Override
     public Page<OrderVo> getMyBuyOrders(Long userId, Integer status, Integer pageNum, Integer pageSize) {

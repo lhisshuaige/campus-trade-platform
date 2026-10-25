@@ -15,12 +15,12 @@ public interface NoticeService {
     //我的收件箱（分页）
     Page<NoticeVo> pageMyNotices(Long loginUserId, NoticePageQueryDTO queryDTO);
 
-    //未读角标
-    long unreadCount(Long loginUserId);
+    //未读角标；type 非空时只数该类（"我卖出"标签的来单红点传 order）
+    long unreadCount(Long loginUserId, String type);
 
     //标记单条已读：只有接收者本人能标
     void markRead(Long noticeId, Long loginUserId);
 
-    //一键全读，返回真正被改动的条数
-    int markAllRead(Long loginUserId);
+    //一键已读，返回真正被改动的条数；type 非空时只清该类
+    int markAllRead(Long loginUserId, String type);
 }

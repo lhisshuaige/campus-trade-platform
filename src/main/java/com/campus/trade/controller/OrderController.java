@@ -78,6 +78,16 @@ public class OrderController {
         return MyResult.success();
     }
 
+    @DeleteMapping("/deleteCancelled")
+    @Operation(summary = "删除已取消的订单", description = "终态清理：仅买卖双方之一可删，且订单必须已是已取消状态；删除后双方列表都不再出现")
+    @Log("删除已取消订单")
+    @RateLimit(key = "order:action", maxCount = 20)
+    public MyResult<Void> deleteCancelled(@RequestParam("id") Long orderId, HttpServletRequest request) {
+        Long loginUserId = (Long) request.getAttribute("loginUserId");
+        orderTradeFacade.deleteCancelledOrder(orderId, loginUserId);
+        return MyResult.success();
+    }
+
     @GetMapping("/myBuyOrders")
     @Operation(summary = "我买到的商品（买家订单列表）", description = "status 可选：0待确认/1已确认/2已完成/3已取消")
     public MyResult<Page<OrderVo>> myBuyOrders(
